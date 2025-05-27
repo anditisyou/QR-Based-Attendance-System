@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Dashboard</title>
+  <link rel="icon" href="logo2.png" sizes="16x16" />
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .card {
+      transition: transform 0.3s, box-shadow 0.3s;
+      background: white;
+      border-radius: 0.75rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .sidebar {
+      transition: all 0.3s;
+    }
+    .skill-bar {
+      height: 8px;
+      border-radius: 4px;
+    }
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: -100%;
+        top: 0;
+        z-index: 50;
+      }
+      .sidebar.active {
+        left: 0;
+      }
+      .sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 40;
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .loading-spinner {
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top: 3px solid #fff;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .attendance-day {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  margin: 2px;
+  font-size: 10px;
+}
+.attendance-present {
+  background-color: #10B981;
+  color: white;
+}
+.attendance-absent {
+  background-color: #EF4444;
+  color: white;
+}
+.attendance-holiday {
+  background-color: #F59E0B;
+  color: white;
+}
+.attendance-na {
+  background-color: #E5E7EB;
+  color: #6B7280;
+}
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+  <div class="flex h-screen overflow-hidden">
+    <!-- Sidebar Overlay (mobile only) -->
+    <div class="sidebar-overlay"></div>
+    
+    <!-- Sidebar -->
+    <div class="sidebar bg-indigo-900 text-white w-64 space-y-6 py-7 px-2 absolute inset-y-0 left-0 transform md:relative md:translate-x-0">
+      <div class="flex items-center space-x-2 px-4">
+        <i class="fas fa-graduation-cap text-2xl text-blue-300"></i>
+        <span class="text-xl font-bold">StudentDash</span>
+      </div>
+      <nav>
+      <a href="#top" class="block py-2.5 px-4 rounded transition duration-200 bg-indigo-800 text-white">
+        <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+      </a>
+      <a href="#academic-profile" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-indigo-800">
+        <i class="fas fa-user-graduate mr-2"></i>Academic Profile
+      </a>
+      <a href="#attendance-overview" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-indigo-800">
+        <i class="fas fa-calendar-check mr-2"></i>Attendance
+      </a>
+      <a href="#skill-matrix" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-indigo-800">
+        <i class="fas fa-chart-line mr-2"></i>Performance
+      </a>
+      <div class="border-t border-indigo-800 mt-4 pt-4 px-4">
+        <a href="#" id="logoutLink" class="block py-2.5 px-4 rounded transition duration-200 hover:bg-indigo-800">
+          <i class="fas fa-sign-out-alt mr-2"></i>Logout
+        </a>
+      </div>
+    </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top Navigation -->
+      <header class="bg-white shadow-sm z-10">
+        <div class="flex items-center justify-between px-6 py-3">
+          <div class="flex items-center">
+            <button id="sidebarToggle" class="md:hidden text-gray-500 focus:outline-none">
+              <i class="fas fa-bars text-xl"></i>
+            </button>
+            <h1 class="text-xl font-semibold text-gray-800 ml-4">Student Dashboard</h1>
+          </div>
+          <div class="flex items-center space-x-4">
+            <div class="relative">
+              <button id="notificationsBtn" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+                <i class="fas fa-bell text-xl"></i>
+                <span id="notificationBadge" class="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500 hidden"></span>
+              </button>
+            </div>
+            <div id="profileHeader" class="flex items-center">
+              <img src="https://ui-avatars.com/api/?name=Ethan+Franklin&background=4f46e5&color=fff" alt="Profile" class="w-8 h-8 rounded-full">
+              <span class="ml-2 text-sm font-medium">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Dashboard Content -->
+      <main class="flex-1 overflow-y-auto p-6 bg-gray-100">
+        <!-- Welcome Banner -->
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white mb-6">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+            <div>
+              <h2 class="text-2xl font-bold" id="welcomeMessage">Welcome back!</h2>
+              <p class="mt-2 opacity-90">"Success is no accident. It is hard work, perseverance, learning, studying, sacrifice and most of all, love of what you are doing." — Pelé</p>
+            </div>
+            <div class="mt-4 md:mt-0 bg-white bg-opacity-20 rounded-lg p-3">
+              <p class="text-sm">Academic Year: <span class="font-bold" id="academicYear">Loading...</span></p>
+              <p class="text-sm mt-1">Department: <span class="font-bold" id="departmentInfo">Loading...</span></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div class="card">
+            <div class="p-6">
+              <div class="flex items-center">
+                <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                  <i class="fas fa-calendar-check text-xl"></i>
+                </div>
+                <div class="ml-4">
+                  <h3 class="text-gray-500 text-sm">Attendance</h3>
+                  <p class="text-2xl font-bold" id="attendancePercentage">--%</p>
+                </div>
+              </div>
+              <div class="mt-4">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-blue-600 h-2.5 rounded-full" id="attendanceBar" style="width: 0%"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Minimum required: 75%</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="p-6">
+              <div class="flex items-center">
+                <div class="p-3 rounded-full bg-green-100 text-green-600">
+                  <i class="fas fa-star text-xl"></i>
+                </div>
+                <div class="ml-4">
+                  <h3 class="text-gray-500 text-sm">CGPA</h3>
+                  <p class="text-2xl font-bold" id="cgpaDisplay">--/4.0</p>
+                </div>
+              </div>
+              <div class="mt-4">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div class="bg-green-600 h-2.5 rounded-full" id="cgpaBar" style="width: 0%"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1" id="cgpaText">Loading...</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="p-6">
+              <div class="flex items-center">
+                <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                  <i class="fas fa-id-card text-xl"></i>
+                </div>
+                <div class="ml-4">
+                  <h3 class="text-gray-500 text-sm">Student ID</h3>
+                  <p class="text-xl font-bold" id="rollNoDisplay">------</p>
+                </div>
+              </div>
+              <div class="mt-4">
+                <p class="text-xs text-gray-500">Reg No: <span id="regNoDisplay">------</span></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="p-6">
+              <div class="flex items-center">
+                <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                  <i class="fas fa-user-graduate text-xl"></i>
+                </div>
+                <div class="ml-4">
+                  <h3 class="text-gray-500 text-sm">Academic Status</h3>
+                  <p class="text-xl font-bold" id="academicStatus">Active</p>
+                </div>
+              </div>
+              <div class="mt-4">
+                <p class="text-xs text-gray-500">Batch: <span id="batchInfo">------</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Left Column -->
+          <div class="lg:col-span-2 space-y-6">
+            <!-- Personal & Academic Info -->
+            <div class="card p-6">
+              <div id="top">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Personal Information</h3>
+                <button id="editPersonalInfoBtn" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                  <i class="fas fa-edit mr-1"></i> Edit
+                </button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-gray-500 text-sm">Full Name</p>
+                      <p class="font-medium" id="fullName">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Date of Birth</p>
+                      <p class="font-medium" id="dob">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Gender</p>
+                      <p class="font-medium" id="gender">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Contact Number</p>
+                      <p class="font-medium" id="contactNumber">Loading...</p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-gray-500 text-sm">Email</p>
+                      <p class="font-medium" id="email">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Address</p>
+                      <p class="font-medium" id="address">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">LinkedIn</p>
+                      <p class="font-medium" id="linkedin">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">GitHub</p>
+                      <p class="font-medium" id="github">Loading...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              </div>
+            </div>
+
+            <!-- Academic Details -->
+            <div id="academic-profile" class="card p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Academic Information</h3>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-gray-500 text-sm">University</p>
+                      <p class="font-medium" id="universityName">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Department</p>
+                      <p class="font-medium" id="department">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Course Duration</p>
+                      <p class="font-medium" id="courseDuration">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Section</p>
+                      <p class="font-medium" id="section">Loading...</p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-gray-500 text-sm">Admission Year</p>
+                      <p class="font-medium" id="admissionYear">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Graduation Year</p>
+                      <p class="font-medium" id="gradYear">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">Academic Advisor</p>
+                      <p class="font-medium" id="advisor">Loading...</p>
+                    </div>
+                    <div>
+                      <p class="text-gray-500 text-sm">University Roll No</p>
+                      <p class="font-medium" id="universityRollNo">Loading...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Attendance Overview -->
+            <!-- Inside your attendance card div -->
+           <div id="attendance-overview" class="card p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Attendance Overview</h3>
+                <select id="attendancePeriodSelect" class="...">
+                  <!-- Options -->
+                </select>
+              </div>
+              <canvas id="attendanceChart" height="250"></canvas>
+              <div id="attendanceOverview"></div> <!-- Add this line -->
+              <button id="markAttendanceBtn" class="mt-4 w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">
+              <i class="fas fa-fingerprint mr-2"></i> Mark Today's Attendance
+            </button>
+            </div>
+
+          <!-- Right Column -->
+          <div class="space-y-6">
+            <!-- Skills Matrix -->
+            <div id="skill-matrix" class="card p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Skills Matrix</h3>
+                <button id="editSkillsBtn" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                  <i class="fas fa-edit mr-1"></i> Edit
+                </button>
+              </div>
+              
+              <div class="mb-4">
+                <h4 class="font-medium text-gray-700 mb-2">Programming & Tools</h4>
+                <div id="programmingSkills" class="space-y-3">
+                  <div class="text-center py-4">
+                    <div class="loading-spinner"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="mb-4">
+                <h4 class="font-medium text-gray-700 mb-2">Domains</h4>
+                <div id="domainSkills" class="flex flex-wrap gap-2">
+                  <div class="text-center py-2 w-full">
+                    <div class="loading-spinner"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h4 class="font-medium text-gray-700 mb-2">Soft Skills</h4>
+                <div id="softSkills" class="flex flex-wrap gap-2">
+                  <div class="text-center py-2 w-full">
+                    <div class="loading-spinner"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Documents -->
+            <div class="card p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Documents & Certificates</h3>
+                <button id="uploadDocumentBtn" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                  <i class="fas fa-upload mr-1"></i> Upload
+                </button>
+              </div>
+              
+              <div class="space-y-3">
+                <div id="idCardLink">
+                  <div class="flex items-center p-3 rounded-lg bg-gray-50">
+                    <i class="fas fa-id-card text-blue-600 mr-3"></i>
+                    <span>Student ID Card</span>
+                    <div class="loading-spinner ml-auto"></div>
+                  </div>
+                </div>
+                
+                <div id="resumeLink">
+                  <div class="flex items-center p-3 rounded-lg bg-gray-50">
+                    <i class="fas fa-file-pdf text-red-600 mr-3"></i>
+                    <span>Resume</span>
+                    <div class="loading-spinner ml-auto"></div>
+                  </div>
+                </div>
+                
+                <div class="pt-3 border-t border-gray-200">
+                  <h4 class="font-medium text-gray-700 mb-2">Fee Receipts</h4>
+                  <div id="feeReceipts" class="space-y-2">
+                    <div class="flex items-center p-2 rounded-lg">
+                      <i class="fas fa-file-invoice-dollar text-green-600 mr-3"></i>
+                      <span>Loading receipts...</span>
+                      <div class="loading-spinner ml-auto"></div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="pt-3 border-t border-gray-200">
+                  <h4 class="font-medium text-gray-700 mb-2">Grade Sheets</h4>
+                  <div id="gradeSheets" class="space-y-2">
+                    <div class="flex items-center p-2 rounded-lg">
+                      <i class="fas fa-award text-yellow-600 mr-3"></i>
+                      <span>Loading grade sheets...</span>
+                      <div class="loading-spinner ml-auto"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Links -->
+            <div class="card p-6">
+              <h3 class="font-bold text-lg mb-4">Quick Links</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <a href="#" class="flex flex-col items-center p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition">
+                  <i class="fas fa-book text-blue-600 mb-1"></i>
+                  <span class="text-sm">Course Materials</span>
+                </a>
+                <a href="#" class="flex flex-col items-center p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition">
+                  <i class="fas fa-calendar-alt text-blue-600 mb-1"></i>
+                  <span class="text-sm">Academic Calendar</span>
+                </a>
+                <a href="#" class="flex flex-col items-center p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition">
+                  <i class="fas fa-file-alt text-blue-600 mb-1"></i>
+                  <span class="text-sm">Exam Schedule</span>
+                </a>
+                <a href="#" class="flex flex-col items-center p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition">
+                  <i class="fas fa-graduation-cap text-blue-600 mb-1"></i>
+                  <span class="text-sm">Results Portal</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Edit Personal Info Modal -->
+  <div id="editPersonalModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-bold">Edit Personal Information</h3>
+        <button id="closePersonalModal" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <form id="personalInfoForm" class="space-y-4">
+        <div>
+          <label class="block text-gray-700 text-sm font-medium mb-1">Full Name</label>
+          <input type="text" id="editFullName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-gray-700 text-sm font-medium mb-1">Email</label>
+          <input type="email" id="editEmail" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-gray-700 text-sm font-medium mb-1">Contact Number</label>
+          <input type="tel" id="editContactNumber" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-gray-700 text-sm font-medium mb-1">Address</label>
+          <textarea id="editAddress" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" id="cancelPersonalEdit" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Upload Document Modal -->
+  <div id="uploadDocumentModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-bold">Upload Document</h3>
+        <button id="closeDocumentModal" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <form id="documentUploadForm" class="space-y-4">
+        <div>
+          <label class="block text-gray-700 text-sm font-medium mb-1">Document Type</label>
+          <select id="documentType" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="resume">Resume</option>
+            <option value="feeReceipt">Fee Receipt</option>
+            <option value="gradeSheet">Grade Sheet</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-gray-700 text-sm font-medium mb-1">Select File</label>
+          <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+            <div class="space-y-1 text-center">
+              <div class="flex text-sm text-gray-600">
+                <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                  <span>Upload a file</span>
+                  <input id="file-upload" name="file-upload" type="file" class="sr-only">
+                </label>
+                <p class="pl-1">or drag and drop</p>
+              </div>
+              <p class="text-xs text-gray-500">
+                PDF, DOCX up to 5MB
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" id="cancelDocumentUpload" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            Upload
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Notifications Panel -->
+  <div id="notificationsPanel" class="fixed right-4 top-16 bg-white rounded-lg shadow-lg w-72 z-50 hidden">
+    <div class="p-4 border-b border-gray-200">
+      <div class="flex justify-between items-center">
+        <h3 class="font-bold">Notifications</h3>
+        <button id="markAllAsRead" class="text-blue-600 text-sm">Mark all as read</button>
+      </div>
+    </div>
+    <div id="notificationsList" class="max-h-80 overflow-y-auto">
+      <div class="p-4 text-center text-gray-500">
+        No new notifications
+      </div>
+    </div>
+    <div class="p-3 border-t border-gray-200 text-center">
+      <a href="#" class="text-sm text-blue-600 hover:text-blue-800">View all notifications</a>
+    </div>
+  </div>
+
+<script type="module">
+  // API Configuration
+  const API_BASE = 'http://localhost:5000'; // Your backend URL
+  let currentRollNo = null;
+  let attendanceChart = null;
+  const notificationBadge = document.getElementById('notificationBadge');
+
+  async function loadDocuments() {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/${encodeURIComponent(currentRollNo)}/documents`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to load documents');
+    }
+
+    const { data } = await response.json();
+    renderDocuments(data);
+  } catch (error) {
+    console.error("Error loading documents:", error);
+  }
+}
+    function generateDeviceFingerprint() {
+    const { userAgent, platform, hardwareConcurrency } = navigator;
+    return btoa(`${userAgent}-${platform}-${hardwareConcurrency}`);
+  }
+  document.addEventListener("DOMContentLoaded", async () => {
+    // Get rollNo from URL or use a default for demo
+    const urlParams = new URLSearchParams(window.location.search);
+    currentRollNo = urlParams.get('rollNo');
+    
+    if (!currentRollNo) {
+      showError("Missing roll number in URL");
+      return;
+    }
+
+    // Initialize UI elements
+    initSidebar();
+    initModals();
+    initNotifications();
+    initAttendanceCalendar();
+
+    // Load student data
+    try {
+      const response = await fetch(`${API_BASE}/api/students/profile?rollNo=${encodeURIComponent(currentRollNo)}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.error || errorJson.message || "Request failed");
+        } catch {
+          throw new Error(errorText || "Request failed");
+        }
+      }
+
+      const { data } = await response.json();
+      renderProfile(data);
+      initializeChart();
+
+      // Load additional data
+      await loadDocuments();
+      await loadAttendanceData('current');
+      
+      // Remove loading spinners
+      document.querySelectorAll('.loading-spinner').forEach(el => el.remove());
+    } catch (error) {
+      showError(`Failed to load data: ${error.message}`);
+      console.error("Error:", error);
+    }
+
+    // Event listener for attendance period select
+    document.getElementById('attendancePeriodSelect').addEventListener('change', function() {
+      updateAttendanceChart(this.value);
+    });
+  });
+
+  function initSidebar() {
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarOverlay = document.querySelector('.sidebar-overlay');
+
+    sidebarToggle.addEventListener('click', function() {
+      sidebar.classList.toggle('active');
+      sidebarOverlay.classList.toggle('active');
+    });
+
+    sidebarOverlay.addEventListener('click', function() {
+      sidebar.classList.remove('active');
+      this.classList.remove('active');
+    });
+  }
+
+  function initModals() {
+    // Personal Info Modal
+    const editPersonalBtn = document.getElementById('editPersonalInfoBtn');
+    const personalModal = document.getElementById('editPersonalModal');
+    const closePersonalModal = document.getElementById('closePersonalModal');
+    const cancelPersonalEdit = document.getElementById('cancelPersonalEdit');
+    const personalInfoForm = document.getElementById('personalInfoForm');
+
+    editPersonalBtn.addEventListener('click', () => {
+      // Fill form with current values
+      document.getElementById('editFullName').value = document.getElementById('fullName').textContent;
+      document.getElementById('editEmail').value = document.getElementById('email').textContent;
+      document.getElementById('editContactNumber').value = document.getElementById('contactNumber').textContent;
+      document.getElementById('editAddress').value = document.getElementById('address').textContent;
+      
+      personalModal.classList.remove('hidden');
+    });
+
+    closePersonalModal.addEventListener('click', () => {
+      personalModal.classList.add('hidden');
+    });
+
+    cancelPersonalEdit.addEventListener('click', () => {
+      personalModal.classList.add('hidden');
+    });
+
+    personalInfoForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      // Get form values
+      const updatedInfo = {
+        fullName: document.getElementById('editFullName').value,
+        email: document.getElementById('editEmail').value,
+        contactNumber: document.getElementById('editContactNumber').value,
+        address: document.getElementById('editAddress').value
+      };
+
+      try {
+        const response = await fetch(`${API_BASE}/api/students/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            rollNo: currentRollNo,
+            ...updatedInfo
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update profile');
+        }
+
+        // Update the UI
+        document.getElementById('fullName').textContent = updatedInfo.fullName;
+        document.getElementById('email').textContent = updatedInfo.email;
+        document.getElementById('contactNumber').textContent = updatedInfo.contactNumber;
+        document.getElementById('address').textContent = updatedInfo.address;
+        
+        // Update welcome message
+        const firstName = updatedInfo.fullName.split(' ')[0];
+        document.getElementById('welcomeMessage').textContent = `Welcome back, ${firstName}!`;
+        document.querySelector('#profileHeader span').textContent = updatedInfo.fullName;
+        
+        // Close modal
+        personalModal.classList.add('hidden');
+        
+        // Show success message
+        showToast('Personal information updated successfully');
+      } catch (error) {
+        showToast('Failed to update profile', 'error');
+        console.error("Update error:", error);
+      }
+    });
+
+    // Document Upload Modal
+    const uploadDocumentBtn = document.getElementById('uploadDocumentBtn');
+    const documentModal = document.getElementById('uploadDocumentModal');
+    const closeDocumentModal = document.getElementById('closeDocumentModal');
+    const cancelDocumentUpload = document.getElementById('cancelDocumentUpload');
+    const documentUploadForm = document.getElementById('documentUploadForm');
+
+    uploadDocumentBtn.addEventListener('click', () => {
+      documentModal.classList.remove('hidden');
+    });
+
+    closeDocumentModal.addEventListener('click', () => {
+      documentModal.classList.add('hidden');
+    });
+
+    cancelDocumentUpload.addEventListener('click', () => {
+      documentModal.classList.add('hidden');
+    });
+
+    documentUploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const fileInput = document.getElementById('file-upload');
+      const documentType = document.getElementById('documentType').value;
+      
+      if (fileInput.files.length === 0) {
+        showToast('Please select a file to upload', 'error');
+        return;
+      }
+      
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('type', documentType);
+      formData.append('rollNo', currentRollNo);
+
+      try {
+        const response = await fetch(`${API_BASE}/api/students/documents`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to upload document');
+        }
+
+        const result = await response.json();
+        
+        documentModal.classList.add('hidden');
+        showToast('Document uploaded successfully');
+        
+        // Refresh documents list
+        await loadDocuments();
+        documentUploadForm.reset();
+      } catch (error) {
+        showToast('Failed to upload document', 'error');
+        console.error("Upload error:", error);
+      }
+    });
+
+    // Skills Edit Modal
+    document.getElementById('editSkillsBtn').addEventListener('click', () => {
+      showToast('Skills editing functionality to be implemented', 'info');
+    });
+  }
+
+  function initNotifications() {
+    const notificationsBtn = document.getElementById('notificationsBtn');
+    const notificationsPanel = document.getElementById('notificationsPanel');
+    const markAllAsRead = document.getElementById('markAllAsRead');
+    const notificationBadge = document.getElementById('notificationBadge');
+
+    // Fetch notifications from API
+    async function fetchNotifications() {
+      try {
+        const response = await fetch(`${API_BASE}/api/students/notifications?rollNo=${encodeURIComponent(currentRollNo)}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to load notifications');
+        }
+
+        const { data } = await response.json();
+        return data;
+      } catch (error) {
+        console.error("Error loading notifications:", error);
+        return [];
+      }
+    }
+
+    // Render notifications
+   async function renderNotifications() {
+  const notifications = await fetchNotifications();
+  const notificationsList = document.getElementById('notificationsList');
+  
+  if (notifications.length === 0) {
+    notificationsList.innerHTML = '<div class="p-4 text-center text-gray-500">No new notifications</div>';
+    notificationBadge.classList.add('hidden');
+    return;
+  }
+  
+  notificationsList.innerHTML = notifications.map(notification => `
+    <div class="p-4 border-b border-gray-100 ${notification.read ? 'bg-white' : 'bg-blue-50'}">
+      <p class="text-sm">${notification.text}</p>
+      <p class="text-xs text-gray-500 mt-1">${new Date(notification.timestamp).toLocaleString()}</p>
+    </div>
+  `).join('');
+
+  // Update badge based on unread notifications
+  const unreadCount = notifications.filter(n => !n.read).length;
+  if (unreadCount > 0) {
+    notificationBadge.classList.remove('hidden');
+  } else {
+    notificationBadge.classList.add('hidden');
+  }
+}
+
+    // Initial render
+    renderNotifications();
+
+    // Toggle notifications panel
+    notificationsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notificationsPanel.classList.toggle('hidden');
+    });
+
+    // Mark all as read
+    // Inside your initNotifications() function, replace the markAllAsRead event listener with this:
+
+// Mark all as read
+document.getElementById('markAllAsRead').addEventListener('click', async () => {
+  try {
+    const response = await fetch(`${API_BASE}/api/students/notifications/read`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        rollNo: currentRollNo
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to mark notifications as read');
+    }
+
+    // Refresh notifications after marking read
+    await renderNotifications();
+    
+    // Explicitly hide the badge after marking all as read
+    notificationBadge.classList.add('hidden');
+    
+    showToast('All notifications marked as read');
+  } catch (error) {
+    showToast('Failed to update notifications', 'error');
+    console.error("Notifications error:", error);
+  }
+});
+
+    // Close notifications when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!notificationsPanel.contains(e.target) && !notificationsBtn.contains(e.target)) {
+        notificationsPanel.classList.add('hidden');
+      }
+    });
+  }
+
+  function initAttendanceCalendar() {
+    // This would be more complex in a real implementation
+    // For now, we'll just create a placeholder
+    const calendarContainer = document.createElement('div');
+    calendarContainer.id = 'attendanceCalendar';
+    calendarContainer.className = 'mt-4';
+    document.querySelector('#attendanceOverview').appendChild(calendarContainer);
+// Attendance marking function (place with other event listeners)
+document.getElementById('markAttendanceBtn')?.addEventListener('click', async () => {
+  try {
+    const response = await fetch(`${API_BASE}/mark-attendance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('fullName').textContent,
+        universityRollNo: currentRollNo,
+        classRollNo: document.getElementById('rollNoDisplay').textContent,
+        section: document.getElementById('section').textContent,
+        deviceFingerprint: generateDeviceFingerprint(),
+        location: { 
+          lat: 30.2688188,  // Default location (replace with real geolocation)
+          lng: 77.9960897 
+        }
+      })
+    });
+
+    const result = await response.json();
+    if (response.ok) {
+      showToast("Attendance marked successfully!");
+      await loadAttendanceData('current'); // Refresh the display
+        } else {
+          showToast(result.message || "Attendance marking failed", "error");
+        }
+      } catch (error) {
+      document.getElementById("welcomeMessage").innerText = "Error: " + error.message;
+      console.error("Error loading student:", error);
+      }
+      });
+    }
+
+  //await loadStudentData();
+
+  async function loadAttendanceData(period) {
+    try {
+        const response = await fetch(`${API_BASE}/api/students/${encodeURIComponent(currentRollNo)}/attendance?period=${period}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to load attendance data');
+        }
+
+        const result = await response.json();
+        
+        if (result.status === "success") {
+            renderAttendanceData(result.data);
+            return result.data;
+        } else {
+            throw new Error(result.message || "Invalid attendance data");
+        }
+    } catch (error) {
+        console.error("Error loading attendance:", error);
+        showToast("Failed to load attendance data", "error");
+        return null;
+    }
+}
+
+  function renderProfile(profile) {
+    const personal = profile.personalInfo || {};
+    const academic = profile.academicInfo || {};
+    const skills = profile.skills || {};
+    const documents = profile.documents || {};
+
+    // Update header and welcome message
+    if (personal.fullName) {
+      document.getElementById('welcomeMessage').textContent = `Welcome back, ${personal.fullName.split(' ')[0]}!`;
+      document.querySelector('#profileHeader span').textContent = personal.fullName;
+      document.getElementById('fullName').textContent = personal.fullName;
+    }
+    
+    // Personal Info
+    document.getElementById('dob').textContent = formatDate(personal.dob) || "N/A";
+    document.getElementById('gender').textContent = personal.gender || "N/A";
+    document.getElementById('contactNumber').textContent = personal.contactNumber || "N/A";
+    document.getElementById('email').textContent = personal.email || "N/A";
+    document.getElementById('address').textContent = personal.address || "N/A";
+    
+    if (personal.linkedin) {
+      document.getElementById('linkedin').innerHTML = `<a href="${personal.linkedin}" target="_blank" class="text-blue-600 hover:underline">View Profile</a>`;
+    } else {
+      document.getElementById('linkedin').textContent = "N/A";
+    }
+    
+    if (personal.github) {
+      document.getElementById('github').innerHTML = `<a href="${personal.github}" target="_blank" class="text-blue-600 hover:underline">View Profile</a>`;
+    } else {
+      document.getElementById('github').textContent = "N/A";
+    }
+
+    // Academic Info
+    document.getElementById('universityName').textContent = academic.universityName || "N/A";
+    document.getElementById('department').textContent = academic.department || "N/A";
+    document.getElementById('departmentInfo').textContent = academic.department || "N/A";
+    document.getElementById('courseDuration').textContent = academic.courseDuration || "N/A";
+    document.getElementById('section').textContent = academic.section || "N/A";
+    document.getElementById('admissionYear').textContent = academic.admissionYear || "N/A";
+    document.getElementById('gradYear').textContent = academic.gradYear || "N/A";
+    document.getElementById('advisor').textContent = academic.advisor || "N/A";
+    document.getElementById('universityRollNo').textContent = academic.universityRollNo || "N/A";
+    document.getElementById('academicYear').textContent = academic.academicYear || "N/A";
+    
+    // Quick Stats
+    document.getElementById('rollNoDisplay').textContent = academic.classRollNo || "------";
+    document.getElementById('regNoDisplay').textContent = academic.regNo || "------";
+    document.getElementById('batchInfo').textContent = `${academic.admissionYear}-${academic.gradYear}` || "------";
+    
+    // CGPA
+    if (academic.cgpa) {
+      const cgpa = parseFloat(academic.cgpa);
+      document.getElementById('cgpaDisplay').textContent = `${cgpa.toFixed(1)}/4.0`;
+      const cgpaPercentage = (cgpa / 4.0) * 100;
+      document.getElementById('cgpaBar').style.width = `${cgpaPercentage}%`;
+      
+      let cgpaText = "";
+      if (cgpa >= 3.5) cgpaText = "Excellent!";
+      else if (cgpa >= 3.0) cgpaText = "Good";
+      else if (cgpa >= 2.0) cgpaText = "Satisfactory";
+      else cgpaText = "Needs Improvement";
+      
+      document.getElementById('cgpaText').textContent = cgpaText;
+    }
+
+    // Skills
+    if (skills.programming && skills.programming.length > 0) {
+      const programmingSkillsHTML = skills.programming.map(skill => {
+        const proficiency = skills.proficiency?.[skill] || "Intermediate";
+        return `
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span>${skill}</span>
+              <span class="text-gray-500">${proficiency}</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="bg-blue-600 h-2 rounded-full" style="width: ${getProficiencyWidth(proficiency)}%"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+      document.getElementById('programmingSkills').innerHTML = programmingSkillsHTML;
+    } else {
+      document.getElementById('programmingSkills').innerHTML = '<p class="text-gray-500">No programming skills listed</p>';
+    }
+    
+    if (skills.domains && skills.domains.length > 0) {
+      const domainsHTML = skills.domains.map(domain => 
+        `<span class="badge bg-green-100 text-green-800">${domain}</span>`
+      ).join("");
+      document.getElementById('domainSkills').innerHTML = domainsHTML;
+    } else {
+      document.getElementById('domainSkills').innerHTML = '<p class="text-gray-500">No domains listed</p>';
+    }
+    
+    if (skills.softSkills && skills.softSkills.length > 0) {
+      const softSkillsHTML = skills.softSkills.map(skill => 
+        `<span class="badge bg-purple-100 text-purple-800">${skill}</span>`
+      ).join("");
+      document.getElementById('softSkills').innerHTML = softSkillsHTML;
+    } else {
+      document.getElementById('softSkills').innerHTML = '<p class="text-gray-500">No soft skills listed</p>';
+    }
+  }
+
+function renderAttendanceData(attendanceData) {
+    // Update attendance percentage in quick stats
+    if (attendanceData.attendancePercentage) {
+        document.getElementById('attendancePercentage').textContent = `${attendanceData.attendancePercentage}%`;
+        document.getElementById('attendanceBar').style.width = `${attendanceData.attendancePercentage}%`;
+        
+        // Optional: Show detailed attendance info
+        const attendanceDetails = document.createElement('p');
+        attendanceDetails.className = 'text-xs text-gray-500 mt-1';
+        attendanceDetails.textContent = `Present: ${attendanceData.presentDays}/${attendanceData.totalClasses} days`;
+        document.querySelector('#attendancePercentage').parentElement.parentElement.appendChild(attendanceDetails);
+    }
+    // Render attendance records table
+    const attendanceOverview = document.getElementById('attendanceOverview');
+    attendanceOverview.innerHTML = ''; // Clear previous content
+    // Update attendance chart with fetched data
+
+
+    if (attendanceData.attendanceRecords && attendanceData.attendanceRecords.length > 0) {
+      const table = document.createElement('div');
+      table.className = 'mt-6 overflow-x-auto';
+      table.innerHTML = `
+        <h4 class="font-medium text-gray-700 mb-3">Recent Attendance Records</h4>
+        <table class="min-w-full bg-white rounded-lg overflow-hidden">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            ${attendanceData.attendanceRecords.slice(0, 10).map(record => `
+              <tr>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${formatDate(record.date)}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    record.status === 'present' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  }">
+                    ${record.status}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${record.time || 'N/A'}</td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${
+                  record.deviceFingerprint ? 'Verified' : 'Not verified'
+                }</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${attendanceData.attendanceRecords.length > 10 ? `
+          <div class="mt-2 text-right">
+            <a href="#" class="text-sm text-blue-600 hover:text-blue-800">View all records</a>
+          </div>
+        ` : ''}
+      `;
+      attendanceOverview.appendChild(table);
+    } else {
+      attendanceOverview.innerHTML = `
+        <div class="text-center py-4 text-gray-500">
+          <i class="fas fa-calendar-times text-2xl mb-2"></i>
+          <p>No attendance records found</p>
+        </div>
+      `;
+    }
+    if (attendanceChart) {
+    // Clear existing datasets
+    attendanceChart.data.datasets = [];
+
+    // Add overall attendance dataset
+    attendanceChart.data.datasets.push({
+      label: 'Overall Attendance',
+      data: [attendanceData.attendancePercentage || 0], // single value like 25
+      backgroundColor: 'rgba(16, 185, 129, 0.7)', // green bar
+      borderColor: 'rgba(5, 150, 105, 1)',
+      borderWidth: 1
+    });
+
+    // (Optional) Add department average or monthly data if you want
+    // attendanceChart.data.datasets.push({ ... });
+
+    // Set labels for the single bar
+    attendanceChart.data.labels = ['Overall Attendance'];
+
+    // Update the chart
+    attendanceChart.update();
+  }
+    // Render calendar view
+    renderAttendanceCalendar(attendanceData.attendanceRecords);
+  }
+
+  function renderAttendanceCalendar(records = []) {
+    const calendarContainer = document.createElement('div');
+    calendarContainer.className = 'mt-6';
+    calendarContainer.innerHTML = `
+      <h4 class="font-medium text-gray-700 mb-3">Monthly Overview</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="monthlyCalendars"></div>
+    `;
+    document.getElementById('attendanceOverview').appendChild(calendarContainer);
+
+    // Group records by month
+    const monthlyRecords = {};
+    records.forEach(record => {
+      const monthYear = new Date(record.date).toLocaleString('default', { month: 'long', year: 'numeric' });
+      if (!monthlyRecords[monthYear]) {
+        monthlyRecords[monthYear] = [];
+      }
+      monthlyRecords[monthYear].push(record);
+    });
+
+    // Create a calendar for each month
+    const monthlyCalendars = document.getElementById('monthlyCalendars');
+    monthlyCalendars.innerHTML = '';
+
+    for (const [monthYear, monthRecords] of Object.entries(monthlyRecords)) {
+      const monthContainer = document.createElement('div');
+      monthContainer.className = 'bg-white p-4 rounded-lg shadow-sm';
+      monthContainer.innerHTML = `
+        <h5 class="font-medium text-gray-700 mb-2">${monthYear}</h5>
+        <div class="grid grid-cols-7 gap-1" id="calendar-${monthYear.replace(' ', '-')}"></div>
+      `;
+      monthlyCalendars.appendChild(monthContainer);
+
+      // Get all days in the month
+      const [monthName, year] = monthYear.split(' ');
+      const monthIndex = new Date(`${monthName} 1, ${year}`).getMonth();
+      const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+
+      // Create day cells
+      const calendarGrid = document.getElementById(`calendar-${monthYear.replace(' ', '-')}`);
+      
+      // Add day headers
+      ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'text-xs text-center font-medium text-gray-500';
+        dayHeader.textContent = day;
+        calendarGrid.appendChild(dayHeader);
+      });
+
+      // Add empty cells for days before the 1st
+      const firstDay = new Date(year, monthIndex, 1).getDay();
+      for (let i = 0; i < firstDay; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'h-6';
+        calendarGrid.appendChild(emptyCell);
+      }
+
+      // Add day cells
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const record = monthRecords.find(r => r.date === dateStr);
+        
+        const dayCell = document.createElement('div');
+        dayCell.className = 'attendance-day';
+        
+        if (record) {
+          dayCell.classList.add(`attendance-${record.status}`);
+          dayCell.title = `${record.status} on ${dateStr}`;
+          dayCell.innerHTML = `<span>${day}</span>`;
+        } else {
+          dayCell.classList.add('attendance-na');
+          dayCell.innerHTML = `<span>${day}</span>`;
+        }
+        
+        calendarGrid.appendChild(dayCell);
+      }
+    }
+  }
+
+  function renderDocuments(documents) {
+    if (documents.idCardUrl) {
+      document.getElementById('idCardLink').innerHTML = `
+        <a href="${documents.idCardUrl}" target="_blank" class="flex items-center p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition">
+          <i class="fas fa-id-card text-blue-600 mr-3"></i>
+          <span>Student ID Card</span>
+          <i class="fas fa-external-link-alt ml-auto text-gray-400 text-sm"></i>
+        </a>
+      `;
+    } else {
+      document.getElementById('idCardLink').innerHTML = `
+        <div class="flex items-center p-3 rounded-lg bg-gray-50">
+          <i class="fas fa-id-card text-blue-600 mr-3"></i>
+          <span>No ID Card uploaded</span>
+        </div>
+      `;
+    }
+    
+    if (documents.resumeUrl) {
+      document.getElementById('resumeLink').innerHTML = `
+        <a href="${documents.resumeUrl}" target="_blank" class="flex items-center p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition">
+          <i class="fas fa-file-pdf text-red-600 mr-3"></i>
+          <span>Download Resume</span>
+          <i class="fas fa-external-link-alt ml-auto text-gray-400 text-sm"></i>
+        </a>
+      `;
+    } else {
+      document.getElementById('resumeLink').innerHTML = `
+        <div class="flex items-center p-3 rounded-lg bg-gray-50">
+          <i class="fas fa-file-pdf text-red-600 mr-3"></i>
+          <span>No Resume uploaded</span>
+        </div>
+      `;
+    }
+    
+    if (documents.feeReceipts && documents.feeReceipts.length > 0) {
+      const feeReceiptsHTML = documents.feeReceipts.map((receipt, index) => `
+        <a href="${receipt.url}" target="_blank" class="flex items-center p-2 rounded-lg hover:bg-gray-50">
+          <i class="fas fa-file-invoice-dollar text-green-600 mr-3"></i>
+          <span>${receipt.name || `Fee Receipt ${index + 1}`}</span>
+          <i class="fas fa-external-link-alt ml-auto text-gray-400 text-sm"></i>
+        </a>
+      `).join("");
+      document.getElementById('feeReceipts').innerHTML = feeReceiptsHTML;
+    } else {
+      document.getElementById('feeReceipts').innerHTML = `
+        <div class="text-gray-500 text-sm py-2">
+          No fee receipts available
+        </div>
+      `;
+    }
+    
+    if (documents.gradeSheets && documents.gradeSheets.length > 0) {
+      const gradeSheetsHTML = documents.gradeSheets.map((sheet, index) => `
+        <a href="${sheet.url}" target="_blank" class="flex items-center p-2 rounded-lg hover:bg-gray-50">
+          <i class="fas fa-award text-yellow-600 mr-3"></i>
+          <span>${sheet.name || `Grade Sheet ${index + 1}`}</span>
+          <i class="fas fa-external-link-alt ml-auto text-gray-400 text-sm"></i>
+        </a>
+      `).join("");
+      document.getElementById('gradeSheets').innerHTML = gradeSheetsHTML;
+    } else {
+      document.getElementById('gradeSheets').innerHTML = `
+        <div class="text-gray-500 text-sm py-2">
+          No grade sheets available
+        </div>
+      `;
+    }
+  }
+
+  function initializeChart() {
+    const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
+    attendanceChart = new Chart(attendanceCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Loading...'],
+        datasets: [{
+          label: 'Your Attendance %',
+          data: [0],
+          backgroundColor: 'rgba(79, 70, 229, 0.7)',
+          borderColor: 'rgba(79, 70, 229, 1)',
+          borderWidth: 1
+        }, {
+          label: 'Department Average',
+          data: [0],
+          backgroundColor: 'rgba(209, 213, 219, 0.7)',
+          borderColor: 'rgba(156, 163, 175, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: function(value) {
+                return value + '%';
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.dataset.label + ': ' + context.raw + '%';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  async function updateAttendanceChart(period) {
+    try {
+      const data = await loadAttendanceData(period);
+      if (data) {
+        // Chart will be updated by renderAttendanceData
+      }
+    } catch (error) {
+      console.error("Error updating chart:", error);
+    }
+  }
+
+  function formatDate(dateString) {
+    if (!dateString) return null;
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString(undefined, options);
+  }
+
+  function getProficiencyWidth(proficiency) {
+    switch(proficiency.toLowerCase()) {
+      case 'beginner': return 30;
+      case 'intermediate': return 60;
+      case 'advanced': return 80;
+      case 'expert': return 95;
+      default: return 50;
+    }
+  }
+
+  function showError(message) {
+    const mainContent = document.querySelector('main');
+    if (mainContent) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'card p-6 mb-6';
+      errorDiv.innerHTML = `
+        <div class="text-red-500 p-4 bg-red-50 rounded-lg">
+          <i class="fas fa-exclamation-circle mr-2"></i>
+          ${message}
+          <button onclick="this.parentElement.parentElement.remove()" class="float-right text-red-700">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `;
+      mainContent.insertBefore(errorDiv, mainContent.firstChild);
+    }
+  }
+
+  function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-md shadow-lg text-white ${
+      type === 'success' ? 'bg-green-600' : 'bg-red-600'
+    } z-50 transition-all duration-300 transform translate-y-8 opacity-0 flex items-center`;
+    
+    toast.innerHTML = `
+      <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-2"></i>
+      <span>${message}</span>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.classList.remove('translate-y-8', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+    }, 10);
+    
+    setTimeout(() => {
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('translate-y-8', 'opacity-0');
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 300);
+    }, 3000);
+  }
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const targetId = this.getAttribute('href').slice(1);
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+
+  // Logout handler
+  document.getElementById('logoutLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = 'index.html';  // Redirect to homepage/login
+  });
+</script>
+</body>
+</html>

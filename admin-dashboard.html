@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+    <div class="max-w-6xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <!-- Navigation Button to QR Scanner -->
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Admin Attendance Dashboard</h1>
+                <a href="qr-scanner.html" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    Take Attendance (QR Scanner)
+                </a>
+            </div>
+            <div class="mb-8">
+    <h2 class="text-lg font-semibold mb-4">Filter Students by Attendance Percentage</h2>
+    <div class="flex gap-2 items-center">
+        <input type="number" id="minPercentage" placeholder="Min %" min="0" max="100" 
+            class="w-20 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+        <span>to</span>
+        <input type="number" id="maxPercentage" placeholder="Max %" min="0" max="100" 
+            class="w-20 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+        <button id="searchPercentageBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+            Search
+        </button>
+    </div>
+    <div id="percentageError" class="text-red-500 mt-2 text-sm"></div>
+</div>
+
+<!-- Add this section for displaying the results -->
+<div id="percentageResults" class="hidden mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold">Students with Attendance Between <span id="percentageRange"></span></h2>
+        <span id="totalStudentsCount" class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium"></span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full border border-gray-300">
+            <thead class="bg-gray-100">
+                <tr>
+                    <th class="px-4 py-2 border">Roll No</th>
+                    <th class="px-4 py-2 border">Name</th>
+                    <th class="px-4 py-2 border">Section</th>
+                    <th class="px-4 py-2 border">Attendance %</th>
+                    <th class="px-4 py-2 border">Present/Total</th>
+                </tr>
+            </thead>
+            <tbody id="percentageResultsTable" class="bg-white"></tbody>
+        </table>
+    </div>
+</div>
+            <!-- Search Student Section -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">Search Student Attendance</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="studentRollNo" placeholder="Enter University Roll No" 
+                        class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <button id="searchStudentBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        Search
+                    </button>
+                </div>
+                <div id="studentError" class="text-red-500 mt-2 text-sm"></div>
+            </div>
+
+            <!-- Student Attendance Details (Hidden by default) -->
+            <div id="studentDetails" class="hidden mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Student Attendance Records</h2>
+                    <span id="studentPercentage" class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 border">Date</th>
+                                <th class="px-4 py-2 border">Time</th>
+                                <th class="px-4 py-2 border">Status</th>
+                                <th class="px-4 py-2 border">Distance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentAttendanceTable" class="bg-white"></tbody>
+                    </table>
+                </div>
+                <canvas id="studentChart" class="mt-6" height="200"></canvas>
+            </div>
+
+            <!-- Date Filter Section -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">View Attendance by Date</h2>
+                <div class="flex gap-2">
+                    <input type="date" id="attendanceDate" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <button id="searchDateBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        View Attendance
+                    </button>
+                </div>
+            </div>
+
+            <!-- Date Attendance Summary (Hidden by default) -->
+            <div id="dateSummary" class="hidden mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Attendance Summary for <span id="summaryDate"></span></h2>
+                    <span id="totalPresent" class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 border">Roll No</th>
+                                <th class="px-4 py-2 border">Name</th>
+                                <th class="px-4 py-2 border">Section</th>
+                                <th class="px-4 py-2 border">Time</th>
+                                <th class="px-4 py-2 border">Distance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dateAttendanceTable" class="bg-white"></tbody>
+                    </table>
+                </div>
+                <canvas id="attendanceChart" class="mt-6" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API_BASE = 'http://localhost:5000';
+    let studentChart = null;
+    let attendanceChart = null;
+
+    function initializeAttendanceChart() {
+        const ctx = document.getElementById('attendanceChart').getContext('2d');
+        attendanceChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Loading...'],
+                datasets: [{
+                    label: 'Attendance %',
+                    data: [0],
+                    backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                    borderColor: 'rgba(79, 70, 229, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.raw + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeAttendanceChart();
+        document.getElementById('searchPercentageBtn').addEventListener('click', searchByPercentageRange);
+        document.getElementById('searchStudentBtn').addEventListener('click', searchStudent);
+        document.getElementById('searchDateBtn').addEventListener('click', viewDateAttendance);
+        document.getElementById('attendanceDate').valueAsDate = new Date();
+    });
+    async function searchByPercentageRange() {
+    const minPercentage = parseInt(document.getElementById('minPercentage').value);
+    const maxPercentage = parseInt(document.getElementById('maxPercentage').value);
+    const errorElement = document.getElementById('percentageError');
+    
+    // Validate inputs
+    if (isNaN(minPercentage) || isNaN(maxPercentage)) {
+        errorElement.textContent = 'Please enter both minimum and maximum percentages';
+        return;
+    }
+    
+    if (minPercentage < 0 || maxPercentage > 100) {
+        errorElement.textContent = 'Percentage must be between 0 and 100';
+        return;
+    }
+    
+    if (minPercentage > maxPercentage) {
+        errorElement.textContent = 'Minimum percentage cannot be greater than maximum';
+        return;
+    }
+    
+    errorElement.textContent = '';
+    
+    try {
+        // Show loading state
+        document.getElementById('percentageResults').classList.add('hidden');
+        
+        // Fetch all students with attendance in the specified range
+        const response = await axios.get(`${API_BASE}/api/students/by-attendance-range`, {
+            params: { min: minPercentage, max: maxPercentage }
+        });
+        
+        const students = response.data.data;
+        
+        // Update the UI with results
+        document.getElementById('percentageResults').classList.remove('hidden');
+        document.getElementById('percentageRange').textContent = `${minPercentage}% - ${maxPercentage}%`;
+        document.getElementById('totalStudentsCount').textContent = `${students.length} students`;
+        
+        const tableBody = document.getElementById('percentageResultsTable');
+        tableBody.innerHTML = '';
+        
+        students.forEach(student => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-4 py-2 border">${student.universityRollNo}</td>
+                <td class="px-4 py-2 border">${student.name}</td>
+                <td class="px-4 py-2 border">${student.section}</td>
+                <td class="px-4 py-2 border">${student.attendancePercentage}%</td>
+                <td class="px-4 py-2 border">${student.presentDays}/${student.totalClasses}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+        
+    } catch (error) {
+        console.error('Error fetching students by percentage range:', error);
+        errorElement.textContent = error.response?.data?.error || 'Failed to fetch student data';
+    }
+}
+    async function searchStudent() {
+        const rollNo = document.getElementById('studentRollNo').value.trim();
+        if (!rollNo) {
+            document.getElementById('studentError').textContent = 'Please enter a roll number';
+            return;
+        }
+
+        try {
+            document.getElementById('studentError').textContent = '';
+            const response = await axios.get(`${API_BASE}/api/students/${rollNo}/attendance`);
+            const data = response.data.data;
+            
+            document.getElementById('studentDetails').classList.remove('hidden');
+            document.getElementById('studentPercentage').textContent = 
+                `Attendance: ${data.attendancePercentage}% (${data.presentDays}/${data.totalClasses})`;
+            
+            const tableBody = document.getElementById('studentAttendanceTable');
+            tableBody.innerHTML = '';
+            
+            data.attendanceRecords.forEach(record => {
+                // Clean and format the time data
+                let displayTime = record.time;
+                if (typeof record.time === 'string' && record.time.includes('x')) {
+                    // If time is in format like "4.29x7.91", extract the first part
+                    displayTime = record.time.split('x')[0] + ':00';
+                } else if (typeof record.time === 'number') {
+                    // If time is a number, convert to time format
+                    const timeStr = record.time.toString();
+                    displayTime = timeStr.length === 4 
+                        ? timeStr.substring(0, 2) + ':' + timeStr.substring(2) + ':00'
+                        : '00:00:00';
+                }
+
+                // Format distance properly
+                let displayDistance = 'N/A';
+                if (record.distanceFromClass) {
+                    displayDistance = record.distanceFromClass.toFixed(2) + 'm';
+                } else if (typeof record.time === 'string' && record.time.includes('x')) {
+                    // If time contains 'x', use the second part as distance
+                    const parts = record.time.split('x');
+                    if (parts.length > 1 && !isNaN(parseFloat(parts[1]))) {
+                        displayDistance = parseFloat(parts[1]).toFixed(2) + 'm';
+                    }
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-4 py-2 border">${record.date}</td>
+                    <td class="px-4 py-2 border">${displayTime}</td>
+                    <td class="px-4 py-2 border">${record.status}</td>
+                    <td class="px-4 py-2 border">${displayDistance}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            updateStudentChart(data.attendanceRecords);
+            
+        } catch (error) {
+            console.error('Error fetching student data:', error);
+            document.getElementById('studentError').textContent = 
+                error.response?.data?.error || 'Failed to fetch student data';
+            document.getElementById('studentDetails').classList.add('hidden');
+        }
+    }
+
+    async function viewDateAttendance() {
+        const date = document.getElementById('attendanceDate').value;
+        if (!date) return;
+
+        try {
+            const response = await axios.get(`${API_BASE}/api/attendance/by-date`, {
+                params: { date }
+            });
+            const attendanceData = response.data.data;
+            
+            document.getElementById('dateSummary').classList.remove('hidden');
+            
+            const dateObj = new Date(date);
+            document.getElementById('summaryDate').textContent = 
+                dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            const presentCount = attendanceData.length;
+            document.getElementById('totalPresent').textContent = 
+                `${presentCount} students present`;
+            
+            const tableBody = document.getElementById('dateAttendanceTable');
+            tableBody.innerHTML = '';
+            
+            attendanceData.forEach(record => {
+                // Clean and format the time data
+                let displayTime = record.time;
+                if (typeof record.time === 'string' && record.time.includes('x')) {
+                    displayTime = record.time.split('x')[0] + ':00';
+                } else if (typeof record.time === 'number') {
+                    const timeStr = record.time.toString();
+                    displayTime = timeStr.length === 4 
+                        ? timeStr.substring(0, 2) + ':' + timeStr.substring(2) + ':00'
+                        : '00:00:00';
+                }
+
+                // Format distance properly
+                let displayDistance = 'N/A';
+                if (record.distanceFromClass) {
+                    displayDistance = record.distanceFromClass.toFixed(2) + 'm';
+                } else if (typeof record.time === 'string' && record.time.includes('x')) {
+                    const parts = record.time.split('x');
+                    if (parts.length > 1 && !isNaN(parseFloat(parts[1]))) {
+                        displayDistance = parseFloat(parts[1]).toFixed(2) + 'm';
+                    }
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-4 py-2 border">${record.universityRollNo}</td>
+                    <td class="px-4 py-2 border">${record.name}</td>
+                    <td class="px-4 py-2 border">${record.section}</td>
+                    <td class="px-4 py-2 border">${displayTime}</td>
+                    <td class="px-4 py-2 border">${displayDistance}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            await updateAttendanceChart(attendanceData);
+            
+        } catch (error) {
+            console.error('Error fetching date attendance:', error);
+            alert('Failed to fetch attendance data for this date');
+        }
+    }
+async function updateStudentChart(attendanceRecords) {
+  const ctx = document.getElementById('studentChart').getContext('2d');
+
+  if (studentChart) {
+    studentChart.destroy();
+  }
+
+  try {
+    // 1. Fetch all class dates from backend
+    const allDatesResponse = await axios.get(`${API_BASE}/api/attendance/dates`);
+    const allDates = allDatesResponse.data.data;
+
+    // 2. Group all class dates by month
+    const allDatesByMonth = {};
+    allDates.forEach(dateStr => {
+      const date = new Date(dateStr);
+      const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+      if (!allDatesByMonth[monthYear]) {
+        allDatesByMonth[monthYear] = [];
+      }
+      allDatesByMonth[monthYear].push(dateStr);
+    });
+
+    // 3. Group student's actual attendance by month
+    const studentRecordsByMonth = {};
+    attendanceRecords.forEach(record => {
+      const monthYear = new Date(record.date).toLocaleString('default', { month: 'short', year: 'numeric' });
+      if (!studentRecordsByMonth[monthYear]) {
+        studentRecordsByMonth[monthYear] = [];
+      }
+      studentRecordsByMonth[monthYear].push(record);
+    });
+
+    // 4. Calculate attendance % for each month
+    const labels = Object.keys(allDatesByMonth);
+    const percentages = labels.map(month => {
+      const totalPossibleDays = allDatesByMonth[month].length;
+      const presentDays = studentRecordsByMonth[month]
+        ? studentRecordsByMonth[month].filter(r => r.status === 'present').length
+        : 0;
+      return Math.round((presentDays / totalPossibleDays) * 100);
+    });
+
+    // 5. Build chart
+    studentChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Monthly Attendance %',
+          data: percentages,
+          backgroundColor: 'rgba(79, 70, 229, 0.7)',
+          borderColor: 'rgba(79, 70, 229, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            ticks: {
+              callback: value => value + '%'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'top',
+            display: true
+          },
+          tooltip: {
+            callbacks: {
+              label: context => `${context.dataset.label}: ${context.raw}%`
+            }
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error generating student chart:", error);
+    alert("Failed to generate accurate attendance chart.");
+  }
+}
+    async function updateAttendanceChart(attendanceData) {
+    const ctx = document.getElementById('attendanceChart').getContext('2d');
+
+    if (attendanceChart) {
+        attendanceChart.destroy();
+    }
+
+    try {
+        // Count present students per section
+        const sectionCounts = {};
+        attendanceData.forEach(record => {
+            const section = record.section || 'Unknown';
+            if (!sectionCounts[section]) sectionCounts[section] = 0;
+            sectionCounts[section]++;
+        });
+
+        const labels = Object.keys(sectionCounts);
+        const data = Object.values(sectionCounts);
+
+        // Generate random colors for each section slice
+        const backgroundColors = labels.map((_, i) =>
+            `hsl(${(i * 360) / labels.length}, 70%, 60%)`
+        );
+
+        attendanceChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Present Students by Section',
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: context => `${context.label}: ${context.raw} students`
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error updating attendance chart:', error);
+    }
+}
+
+</script>
+</body>
+</html>

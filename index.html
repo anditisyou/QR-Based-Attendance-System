@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Attendance</title>
+    <link rel="icon" href="logo3.png" sizes="16x16" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="consistent-hash.js"></script>
+    <script defer src="/script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+    
+</head>
+<body class="min-h-screen">
+    <div class="flex items-center justify-center p-4">
+        <div class="card w-full max-w-md p-8">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">Student Attendance</h2>
+                <p class="text-gray-500 mt-1">Please enter your details to mark attendance</p>
+            </div>
+            
+            <form id="attendanceForm" class="space-y-5">
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input type="text" id="name" placeholder="Enter your full name" 
+                        class="form-input w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                </div>
+                
+                <div>
+                    <label for="universityRollNo" class="block text-sm font-medium text-gray-700 mb-1">University Roll No</label>
+                    <input type="text" id="universityRollNo" placeholder="Enter your university roll number" 
+                        class="form-input w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="section" class="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                        <input type="text" id="section" placeholder="Section" 
+                            class="form-input w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                    <div>
+                        <label for="classRollNo" class="block text-sm font-medium text-gray-700 mb-1">Class Roll No</label>
+                        <input type="text" id="classRollNo" placeholder="Class roll number" 
+                            class="form-input w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                    </div>
+                </div>
+                
+                <button type="submit" 
+                    class="w-full bg-primary-600 text-white p-3 rounded-lg hover:bg-primary-700 transition-colors font-medium flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Submit Attendance
+                </button>
+                <!--<a href="/frontend/dashboard.html" class="w-full mt-4 inline-flex items-center justify-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
+                    Go to Dashboard
+                </a>-->
+            </form>
+            <!-- Add this below your current <p id="status">... -->
+<p id="status" class="text-center mt-6 text-sm"></p>
+
+<!-- Dashboard Button Section -->
+<div class="mt-8">
+    <label for="rollInput" class="block text-sm font-medium text-gray-700 mb-1">Check Your Attendance</label>
+    <div class="flex gap-2">
+        <input type="text" id="rollInput" placeholder="Enter University Roll No"
+            class="form-input flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500" />
+        <!--<button onclick="checkAttendanceAndLoadDashboard()"
+            class="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors font-medium">
+            View Dashboard
+        </button>-->
+        <button id="view-dashboard-btn" class="btn btn-primary">
+            View Dashboard
+        </button>
+    </div>
+</div>
+
+<!-- Access Message -->
+<div id="accessMessage" class="text-sm text-center mt-4 text-red-600 font-medium"></div>
+
+<!-- Dashboard View -->
+<div id="dashboard" class="card mt-6 p-6 hidden">
+    <h3 class="text-lg font-semibold text-gray-800 mb-4 text-center">Attendance Dashboard</h3>
+    <div class="overflow-x-auto">
+        <table class="min-w-full table-auto border border-gray-300 text-sm text-left">
+            <thead class="bg-primary-100 text-gray-700">
+                <tr>
+                    <th class="px-4 py-2 border">Date</th>
+                    <th class="px-4 py-2 border">Time</th>
+                    <th class="px-4 py-2 border">Device</th>
+                    <th class="px-4 py-2 border">Location</th>
+                </tr>
+            </thead>
+            <tbody id="attendanceTable" class="bg-white"></tbody>
+        </table>
+    </div>
+</div>
+              
+        </div>
+    </div>
+</body>
+</html>
