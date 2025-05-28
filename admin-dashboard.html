@@ -233,10 +233,11 @@
         
         students.forEach(student => {
             const row = document.createElement('tr');
+            // Update the table row generation to handle all cases
             row.innerHTML = `
-                <td class="px-4 py-2 border">${student.universityRollNo}</td>
-                <td class="px-4 py-2 border">${student.name}</td>
-                <td class="px-4 py-2 border">${student.section}</td>
+                <td class="px-4 py-2 border">${student.universityRollNo || 'N/A'}</td>
+                <td class="px-4 py-2 border">${student.name || student.personalInfo?.fullName || 'N/A'}</td>
+                <td class="px-4 py-2 border">${student.section || student.academicInfo?.section || 'N/A'}</td>
                 <td class="px-4 py-2 border">${student.attendancePercentage}%</td>
                 <td class="px-4 py-2 border">${student.presentDays}/${student.totalClasses}</td>
             `;

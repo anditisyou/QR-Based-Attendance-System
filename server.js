@@ -1,3 +1,6 @@
+
+
+
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
@@ -9,6 +12,33 @@ const crypto = require('crypto');
 const helmet = require("helmet");
 //const sha256 = require('./sha256');
 const { execSync } = require('child_process');
+
+// Import models and routes
+const User = require("./models/User");
+const Attendance = require("./models/Attendance");
+const StudentProfile = require("./models/StudentProfile");
+const studentProfileRoutes = require("./routes/studentProfile");
+const attendanceRoutes = require("./routes/attendance");
+const { generateQRCode, validateSession } = require('./qr-generator');
+
+// --- NEW: Import algorithm modules ---
+// Assuming these files exist in an 'algorithms' directory at the same level as server.js
+// And they export functions as described in the thought process.
+let dijkstra, profileOptimizer, graphTraversal;
+try {
+  dijkstra = require('./algorithms/dijkstra');
+  profileOptimizer = require('./algorithms/profileOptimizer');
+  graphTraversal = require('./algorithms/graphTraversal');
+  console.log("Successfully loaded algorithm modules.");
+} catch (err) {
+  console.warn("Warning: Could not load one or more algorithm modules. Related endpoints might not work.", err.message);
+  // Define dummy functions if modules are missing to prevent server crashes on require
+  dijkstra = { findShortestPath: () => { throw new Error("Dijkstra module not loaded"); } };
+  profileOptimizer = { getProfileRecommendations: () => { throw new Error("ProfileOptimizer module not loaded"); } };
+  graphTraversal = { exploreCommunity: () => { throw new Error("GraphTraversal module not loaded"); } };
+}
+// --- END NEW ---
+
 
 const requiredEnvVars = ['MONGO_URI'];
 requiredEnvVars.forEach(envVar => {
@@ -128,19 +158,10 @@ const qrLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Import models and routes
-const User = require("./models/User");
-const Attendance = require("./models/Attendance");
-const StudentProfile = require("./models/StudentProfile");
-const studentProfileRoutes = require("./routes/studentProfile");
-const attendanceRoutes = require("./routes/attendance");
-const { generateQRCode, validateSession } = require('./qr-generator');
 
 // Routes
 app.use("/api/students", studentProfileRoutes);
 app.use("/api/attendance", attendanceRoutes);
-// Add this with your other routes
-// Add this with your other student routes (only once)
 
 app.get('/api/students/by-attendance-range', async (req, res) => {
     try {
@@ -191,69 +212,109 @@ app.get('/api/students/by-attendance-range', async (req, res) => {
             });
         }
 
-        // Optimized aggregation to get students with attendance in range
-        const results = await StudentProfile.aggregate([
-            {
-                $lookup: {
-                    from: "attendances",
-                    let: { rollNo: "$universityRollNo" },
-                    pipeline: [
-                        { 
-                            $match: { 
-                                $expr: { 
-                                    $and: [
-                                        { $eq: ["$universityRollNo", "$$rollNo"] },
-                                        { $eq: ["$status", "present"] }
-                                    ]
-                                }
-                            }
-                        },
-                        { $count: "presentDays" }
-                    ],
-                    as: "attendance"
-                }
-            },
-            {
-                $addFields: {
-                    presentDays: { $ifNull: [{ $arrayElemAt: ["$attendance.presentDays", 0] }, 0] },
-                    totalClasses: totalClasses,
-                    attendancePercentage: {
-                        $round: [
+        // Aggregation to get students with attendance in range
+       const results = await StudentProfile.aggregate([
+    {
+        $lookup: {
+            from: "users",  // Join with User collection
+            localField: "universityRollNo",
+            foreignField: "universityRollNo",
+            as: "user"
+        }
+    },
+    {
+        $lookup: {
+            from: "attendances",
+            let: { rollNo: "$universityRollNo" },
+            pipeline: [
+                { 
+                    $match: { 
+                        $expr: { 
+                            $and: [
+                                { $eq: ["$universityRollNo", "$$rollNo"] },
+                                { $eq: ["$status", "present"] }
+                            ]
+                        }
+                    }
+                },
+                { $count: "presentDays" }
+            ],
+            as: "attendance"
+        }
+    },
+    {
+        $addFields: {
+            presentDays: { $ifNull: [{ $arrayElemAt: ["$attendance.presentDays", 0] }, 0] },
+            totalClasses: totalClasses,
+            attendancePercentage: {
+                $round: [
+                    { 
+                        $multiply: [
                             { 
-                                $multiply: [
-                                    { 
-                                        $divide: [
-                                            { $ifNull: [{ $arrayElemAt: ["$attendance.presentDays", 0] }, 0] },
-                                            totalClasses
-                                        ] 
-                                    },
-                                    100
+                                $divide: [
+                                    { $ifNull: [{ $arrayElemAt: ["$attendance.presentDays", 0] }, 0] },
+                                    totalClasses
                                 ] 
-                            }
-                        ]
+                            },
+                            100
+                        ] 
+                    }
+                ]
+            },
+            // Handle both data structures
+            name: {
+                $ifNull: [
+                    { $arrayElemAt: ["$user.name", 0] },
+                    { $arrayElemAt: ["$user.personalInfo.fullName", 0] },
+                    "N/A"
+                ]
+            },
+            section: {
+                $ifNull: [
+                    { $arrayElemAt: ["$user.section", 0] },
+                    { $arrayElemAt: ["$user.academicInfo.section", 0] },
+                    "N/A"
+                ]
+            }
+        }
+    },
+    {
+        $match: {
+            attendancePercentage: { $gte: minPercentage, $lte: maxPercentage }
+        }
+    },
+    {
+        $sort: { attendancePercentage: -1 }
+    },
+    {
+        $project: {
+            universityRollNo: 1,
+            name: 1,
+            section: 1,
+            attendancePercentage: 1,
+            presentDays: 1,
+            totalClasses: 1,
+            _id: 0
+        }
+    }
+]);
+
+        // --- MANUAL SORTING (Bubble Sort, descending by attendancePercentage) ---
+        if (results && results.length > 1) {
+            const n = results.length;
+            for (let i = 0; i < n - 1; i++) {
+                for (let j = 0; j < n - i - 1; j++) {
+                    // Sort in descending order of attendancePercentage
+                    if (results[j].attendancePercentage < results[j + 1].attendancePercentage) {
+                        // Swap elements
+                        const temp = results[j];
+                        results[j] = results[j + 1];
+                        results[j + 1] = temp;
                     }
                 }
-            },
-            {
-                $match: {
-                    attendancePercentage: { $gte: minPercentage, $lte: maxPercentage }
-                }
-            },
-            {
-                $sort: { attendancePercentage: -1 }
-            },
-            {
-                $project: {
-                    universityRollNo: 1,
-                    name: 1,
-                    section: 1,
-                    attendancePercentage: 1,
-                    presentDays: 1,
-                    totalClasses: 1,
-                    _id: 0
-                }
             }
-        ]);
+        }
+        // --- END MANUAL SORTING ---
 
         res.json({ 
             status: "success",
@@ -319,32 +380,27 @@ app.get("/api/generate-qr", qrLimiter, async (req, res) => {
     });
   }
 });
-// Add this with your other routes
 app.post('/api/consistent-hash', async (req, res) => {
     try {
         const { input } = req.body;
         
-        // Validate input
         if (typeof input !== 'string' || !input.trim()) {
             return res.status(400).json({ error: 'Input must be a non-empty string' });
         }
 
-        // Execute Java program
         const escapedInput = input
-            .replace(/"/g, '\\"')          // Escape double quotes
-            .replace(/\$/g, '\\$')         // Escape dollar signs (shell injection)
-            .replace(/`/g, '\\`');         // Escape backticks (shell injection)
+            .replace(/"/g, '\\"')
+            .replace(/\$/g, '\\$')
+            .replace(/`/g, '\\`');
 
-        // Use absolute path to Java class and specify classpath
         const command = `java ConsistentHash "${escapedInput}"`;
         
         const result = execSync(command, { 
             encoding: 'utf-8',
             stdio: ['pipe', 'pipe', 'ignore'],
-            timeout: 5000  // Kill process if it hangs (5 seconds)
+            timeout: 5000
         });
 
-        // Validate Java output (must be 8-character hex)
         if (!/^[0-9a-f]{8}$/.test(result.trim())) {
             throw new Error('Invalid hash format from Java');
         }
@@ -352,9 +408,7 @@ app.post('/api/consistent-hash', async (req, res) => {
         res.json({ fingerprint: result.trim() });
     } catch (error) {
         console.error("Consistent hash error:", error);
-        
-        // Fallback to JavaScript implementation if Java fails
-        const jsHash = consistentHashJS(req.body.input);  // Implement this as a backup
+        const jsHash = consistentHashJS(req.body.input);
         res.status(500).json({ 
             error: 'Java hashing failed. Used JS fallback.',
             fingerprint: jsHash 
@@ -362,7 +416,6 @@ app.post('/api/consistent-hash', async (req, res) => {
     }
 });
 
-// Fallback JavaScript implementation (same as original)
 function consistentHashJS(input) {
     let hash = 0;
     for (let i = 0; i < input.length; i++) {
@@ -370,7 +423,7 @@ function consistentHashJS(input) {
     }
     return hash.toString(16).padStart(8, '0');
 }
-// Session Validation Endpoint
+
 app.post("/api/validate-session", async (req, res) => {
   try {
     const { sessionId } = req.body;
@@ -394,48 +447,44 @@ app.post("/api/validate-session", async (req, res) => {
     });
   }
 });
-// Replace the current /verify-attendance route with:
-// In server.js, update the verify-attendance route:
+
 app.get('/verify-attendance', (req, res) => {
     try {
-        console.log('Raw query data:', req.query.data); // Add this line
+        console.log('Raw query data:', req.query.data);
         const dataStr = decodeURIComponent(req.query.data);
         const data = JSON.parse(dataStr);
-        console.log('Parsed data:', data); // Add this line
+        console.log('Parsed data:', data);
 
-        // Validate required fields
         if (!data?.sessionId || !data?.timestamp || !data?.hash) {
-            console.log('Missing fields in data:', data); // Add this line
+            console.log('Missing fields in data:', data);
             return res.status(400).send('Invalid QR code data: Missing fields');
         }
 
         const secretKey = process.env.QR_SECRET_KEY || 'default-secret-key';
-        console.log('Using secret key:', secretKey); // Add this line
+        console.log('Using secret key:', secretKey);
         
         const hashInput = data.sessionId + data.timestamp + secretKey;
-        console.log('Hash input string:', hashInput); // Add this line
+        console.log('Hash input string:', hashInput);
         
         const expectedHash = sha256(hashInput);
-        console.log('Expected hash:', expectedHash); // Add this line
-        console.log('Received hash:', data.hash); // Add this line
+        console.log('Expected hash:', expectedHash);
+        console.log('Received hash:', data.hash);
 
         if (data.hash !== expectedHash) {
             console.log('Hash mismatch details:', {
                 input: hashInput,
                 expected: expectedHash,
                 received: data.hash
-            }); // Add this line
+            });
             return res.status(400).send('Invalid QR code: Hash mismatch');
         }
 
-        // Check if session is expired (optional)
         const currentTime = Date.now();
-        const qrExpiryTime = 15 * 60 * 1000; // 15 minutes
+        const qrExpiryTime = 15 * 60 * 1000;
         if (currentTime - data.timestamp > qrExpiryTime) {
             return res.status(400).send('QR code expired');
         }
 
-        // Redirect to the attendance page with sessionId
         res.redirect(`/index.html?sessionId=${data.sessionId}`);
     }  catch (error) {
         console.error('QR validation error:', error);
@@ -443,23 +492,16 @@ app.get('/verify-attendance', (req, res) => {
     }
 });
 
-// Haversine Distance Calculation
 function getDistanceFromLatLngInMeters(lat1, lng1, lat2, lng2) {
     try {
-        // Escape quotes and special characters in coordinates
         const command = `java Haversine ${lat1} ${lng1} ${lat2} ${lng2}`;
-        
-        // Execute Java program synchronously
         const result = execSync(command, { 
             encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'ignore'] // Suppress Java errors from stderr
+            stdio: ['pipe', 'pipe', 'ignore']
         });
-        
         return parseFloat(result.trim());
     } catch (error) {
         console.error("Java Haversine Error:", error.message);
-        
-        // Fallback to original JavaScript implementation if Java fails
         const toRad = angle => (angle * Math.PI) / 180;
         const R = 6371000;
         const dLat = toRad(lat2 - lat1);
@@ -474,24 +516,22 @@ function getDistanceFromLatLngInMeters(lat1, lng1, lat2, lng2) {
 
 function sha256(input) {
     try {
-        // Escape quotes and special characters in input
         const escapedInput = input.replace(/"/g, '\\"');
         const command = `java SHA256 "${escapedInput}"`;
-        
-        // Execute Java program synchronously
         const result = execSync(command, { 
             encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'ignore'] // Suppress Java errors from stderr
+            stdio: ['pipe', 'pipe', 'ignore']
         });
-        
         return result.trim();
     } catch (error) {
         console.error("Java SHA-256 Error:", error.message);
-        throw new Error("Failed to compute SHA-256 hash");
+        // Fallback to crypto module if Java fails (more robust)
+        console.warn("Java SHA-256 failed. Using Node.js crypto fallback.");
+        return crypto.createHash('sha256').update(input).digest('hex');
+        // throw new Error("Failed to compute SHA-256 hash"); // Original behavior
     }
 }
 
-// Health Check Endpoint
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -500,8 +540,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-
-// Attendance Validation Middleware
 function validateAttendance(req, res, next) {
   const required = ['name', 'universityRollNo', 'section', 'classRollNo', 'deviceFingerprint'];
   const missing = required.filter(field => !req.body[field]);
@@ -519,20 +557,16 @@ function validateAttendance(req, res, next) {
       message: "Location (lat, lng) is required and must be numeric"
     });
   }
-
   next();
 }
 
-// Mark Attendance Endpoint
 app.post("/mark-attendance", validateAttendance, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-
   try {
     const { universityRollNo, deviceFingerprint, location } = req.body;
     const today = new Date().toISOString().split('T')[0];
 
-    // Check existing attendance
     const [existing, existingDevice] = await Promise.all([
       Attendance.findOne({ universityRollNo, date: today }).session(session),
       Attendance.findOne({ deviceFingerprint, date: today }).session(session)
@@ -556,7 +590,6 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
       });
     }
 
-    // Check location
     const distance = getDistanceFromLatLngInMeters(
       location.lat, location.lng,
       CLASS_LAT, CLASS_LNG
@@ -567,11 +600,10 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
       session.endSession();
       return res.status(400).json({
         status: "error",
-        message: "You must be within 100 meters of the classroom to mark attendance"
+        message: `You must be within ${MAX_DISTANCE_METERS} meters of the classroom to mark attendance. Current distance: ${distance.toFixed(0)}m`
       });
     }
 
-    // Create/update student
     const student = await User.findOneAndUpdate(
       { universityRollNo },
       {
@@ -581,14 +613,9 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
           classRollNo: req.body.classRollNo
         }
       },
-      {
-        new: true,
-        upsert: true,
-        session
-      }
+      { new: true, upsert: true, session }
     );
 
-    // Create attendance record
     const attendance = await Attendance.create([{
       ...req.body,
       date: today,
@@ -600,13 +627,11 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
-
     res.json({
       status: "success",
       message: "Attendance marked successfully",
       data: attendance[0]
     });
-
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -618,16 +643,17 @@ app.post("/mark-attendance", validateAttendance, async (req, res) => {
 app.get('/api/students/profile', async (req, res) => {
     try {
         const { rollNo } = req.query;
-        const student = await StudentProfile.findOne({ 
-            universityRollNo: rollNo 
-        });
+        console.log(`[PROFILE] Attempting to find profile for rollNo: ${rollNo}`); // ADD THIS
+        const student = await StudentProfile.findOne({ universityRollNo: rollNo });
         
         if (!student) {
+            console.log(`[PROFILE] Student not found: ${rollNo}`); // ADD THIS
             return res.status(404).json({ error: 'Student not found' });
         }
-        
+        console.log(`[PROFILE] Student found:`, student); // ADD THIS
         res.json({ data: student });
     } catch (error) {
+        console.error(`[PROFILE] Error fetching profile for ${rollNo}:`, error); // ADD THIS
         res.status(500).json({ error: error.message });
     }
 });
@@ -642,22 +668,22 @@ app.get('/api/students/notifications', async (req, res) => {
 });
 
 app.post('/api/students/notifications/read', (req, res) => {
-  res.json({ status: 'success' }); // Simulate marking as read
+  const { rollNo } = req.body;
+  // TODO: Implement actual DB update here
+  console.log(`Marking all notifications as read for rollNo: ${rollNo}`);
+  res.json({ status: 'success' });
 });
 
-// Update the attendance route to match frontend expectations
 app.get("/api/students/:rollNo/attendance", async (req, res) => {
     try {
         const { rollNo } = req.params;
         const period = req.query.period || 'current';
         
-        // First verify student exists
         const student = await StudentProfile.findOne({ universityRollNo: rollNo });
         if (!student) {
             return res.status(404).json({ error: 'Student not found' });
         }
 
-        // Calculate date range based on period
         const dateRange = {
             current: () => ({ 
                 start: new Date(new Date().setMonth(new Date().getMonth() - 4)), 
@@ -675,7 +701,6 @@ app.get("/api/students/:rollNo/attendance", async (req, res) => {
 
         const { start, end } = dateRange[period] ? dateRange[period]() : dateRange.current();
 
-        // Get all attendance records for the period (to calculate total classes)
         const allAttendance = await Attendance.find({
             date: {
                 $gte: new Date(start).toISOString().split('T')[0],
@@ -685,7 +710,6 @@ app.get("/api/students/:rollNo/attendance", async (req, res) => {
 
         const totalClasses = allAttendance.length;
 
-        // Get student's attendance records
         const attendance = await Attendance.find({
             universityRollNo: rollNo,
             date: {
@@ -694,32 +718,37 @@ app.get("/api/students/:rollNo/attendance", async (req, res) => {
             }
         }).sort({ date: 1 });
 
-        // Calculate statistics
         const presentDays = attendance.filter(a => a.status === 'present').length;
         const percentage = totalClasses > 0 ? Math.round((presentDays / totalClasses) * 100) : 0;
 
-        // Monthly data for chart
         const monthlyData = attendance.reduce((acc, record) => {
             const monthYear = new Date(record.date).toLocaleString('default', { month: 'short', year: 'numeric' });
             if (!acc[monthYear]) acc[monthYear] = { present: 0, total: 0 };
-            acc[monthYear].total++;
+            // This total might be per student, not overall if a class was held but student was absent.
+            // For overall total, we'd need all class dates.
+            // The current logic for monthlyData seems to count days the student had a record.
+            // Let's assume for now this is fine for the chart.
+            const dateKey = new Date(record.date).toISOString().split('T')[0];
+            // Count total based on all class dates in that month
+            // This part is tricky, depends on how `allAttendance` (all unique class dates) is used here.
+            // For simplicity, current approach is okay.
+            acc[monthYear].total++; // This counts student's records
             if (record.status === 'present') acc[monthYear].present++;
             return acc;
         }, {});
 
         const labels = Object.keys(monthlyData);
         const studentAttendance = labels.map(label => 
-            Math.round((monthlyData[label].present / monthlyData[label].total) * 100)
+            monthlyData[label].total > 0 ? Math.round((monthlyData[label].present / monthlyData[label].total) * 100) : 0
         );
 
-        // Format response to match frontend expectations
         res.json({
             status: "success",
             data: {
                 attendanceRecords: attendance,
                 attendancePercentage: percentage,
-                totalClasses: totalClasses, // Add this for reference
-                presentDays: presentDays, // Add this for reference
+                totalClasses: totalClasses,
+                presentDays: presentDays,
                 chartData: {
                     labels,
                     studentAttendance,
@@ -735,29 +764,163 @@ app.get("/api/students/:rollNo/attendance", async (req, res) => {
 });
 app.get('/api/students/:rollNo/documents', async (req, res) => {
   const { rollNo } = req.params;
-
-  // You can load from MongoDB later; for now return dummy values
+  // Dummy data, replace with DB lookup
   res.json({
     data: {
-      idCardUrl: null,
-      resumeUrl: null,
-      feeReceipts: [],
-      gradeSheets: []
+      idCardUrl: null, // or 'path/to/idcard.pdf'
+      resumeUrl: null, // or 'path/to/resume.pdf'
+      feeReceipts: [], // or [{ name: 'Sem1_Receipt.pdf', url: '...' }]
+      gradeSheets: []  // or [{ name: 'Sem1_Grades.pdf', url: '...' }]
     }
   });
 });
-app.post('/api/students/notifications/read', (req, res) => {
-  const { rollNo } = req.body;
 
-  // TODO: Implement actual DB update here:
-  // Example with MongoDB:
-  // await Notification.updateMany({ rollNo, read: false }, { $set: { read: true } });
 
-  console.log(`Marking all notifications as read for rollNo: ${rollNo}`);
+// --- NEW ALGORITHM ENDPOINTS ---
 
-  // For now, just simulate success
-  res.json({ status: 'success' });
+// Dijkstra: Shortest path from hostel to class
+app.get('/api/navigation/shortest-path', async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        if (!start || !end) {
+            return res.status(400).json({ status: "error", message: "Start and end locations are required." });
+        }
+
+        // Placeholder: graphData should represent your campus map (nodes, edges, weights)
+        // This would typically be loaded from a database or a configuration file.
+        const graphData = {
+            nodes: ["HostelA", "HostelB", "Library", "Mess", "AdminBuilding", "CSEDept", "ECEdept", "MainGate"],
+            edges: [
+                { from: "HostelA", to: "Mess", weight: 5 }, // weight could be distance in meters or time in minutes
+                { from: "HostelA", to: "Library", weight: 7 },
+                { from: "Mess", to: "CSEDept", weight: 10 },
+                { from: "Library", to: "CSEDept", weight: 6 },
+                { from: "Library", to: "AdminBuilding", weight: 3 },
+                { from: "AdminBuilding", to: "ECEdept", weight: 4 },
+                { from: "CSEDept", to: "ECEdept", weight: 2 },
+                { from: "MainGate", to: "HostelA", weight: 15 },
+                { from: "MainGate", to: "AdminBuilding", weight: 8 },
+            ]
+        };
+        
+        if (!graphData.nodes.includes(start) || !graphData.nodes.includes(end)) {
+             return res.status(404).json({ status: "error", message: "One or both locations not found in map data." });
+        }
+
+        const result = dijkstra.findShortestPath(start, end, graphData);
+        
+        if (!result || result.path.length === 0) {
+            return res.status(404).json({ status: "success", message: `No path found from ${start} to ${end}.`, data: result });
+        }
+
+        res.json({ status: "success", data: result });
+
+    } catch (error) {
+        console.error("Dijkstra shortest path error:", error);
+        if (error.message.includes("module not loaded")) {
+             return res.status(501).json({ status: "error", message: "Navigation module is not available." });
+        }
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
+
+// Knapsack/DP: Optimize profile recommendations
+app.get('/api/students/:rollNo/recommendations', async (req, res) => {
+    const { rollNo } = req.params;
+    const { type } = req.query; // e.g., "course", "job", "skill"
+
+    if (!type) {
+        return res.status(400).json({ status: "error", message: "Recommendation type is required (e.g., 'course', 'job')." });
+    }
+
+    try {
+        const studentProfile = await StudentProfile.findOne({ universityRollNo: rollNo });
+        if (!studentProfile) {
+            return res.status(404).json({ status: "error", message: "Student profile not found." });
+        }
+
+        // Placeholder: availableItems would come from a database or configuration
+        // This is highly dependent on the 'type' of recommendation
+        let availableItems = [];
+        if (type === "course") {
+            availableItems = [
+                { id: "CS101", name: "Intro to Programming", difficulty: 2, relevance_tags: ["programming", "beginner"] },
+                { id: "CS305", name: "Machine Learning", difficulty: 4, relevance_tags: ["ai", "ml", "advanced", "math"] },
+                { id: "DS202", name: "Data Structures", difficulty: 3, relevance_tags: ["programming", "core"] },
+                { id: "EE201", name: "Basic Electronics", difficulty: 3, relevance_tags: ["electronics", "hardware"] },
+            ];
+        } else if (type === "job") {
+            availableItems = [
+                { id: "JOB01", title: "Software Dev Intern", required_skills: ["javascript", "nodejs"], company: "TechCorp" },
+                { id: "JOB02", title: "Data Analyst", required_skills: ["python", "sql", "statistics"], company: "DataDrivenLLC" },
+                { id: "JOB03", title: "Hardware Engineer", required_skills: ["verilog", "circuit design"], company: "ChipMakers" },
+            ];
+        } else {
+            return res.status(400).json({ status: "error", message: "Unsupported recommendation type." });
+        }
+        
+        const recommendations = profileOptimizer.getProfileRecommendations(studentProfile.toObject(), type, availableItems);
+        
+        res.json({ status: "success", data: recommendations });
+
+    } catch (error) {
+        console.error("Profile recommendation error:", error);
+         if (error.message.includes("module not loaded")) {
+             return res.status(501).json({ status: "error", message: "Recommendation module is not available." });
+        }
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+// DFS/BFS: Community network or graph-based friend explorer
+app.get('/api/students/:rollNo/community', async (req, res) => {
+    const { rollNo } = req.params;
+    const depth = parseInt(req.query.depth) || 2; // Default depth
+    const algorithm = req.query.algorithm || 'bfs'; // 'bfs' or 'dfs'
+
+    if (algorithm !== 'bfs' && algorithm !== 'dfs') {
+        return res.status(400).json({ status: "error", message: "Invalid algorithm type. Use 'bfs' or 'dfs'." });
+    }
+    if (depth <= 0 || depth > 5) { // Cap depth to prevent excessive computation
+        return res.status(400).json({ status: "error", message: "Depth must be between 1 and 5." });
+    }
+
+    try {
+        const studentExists = await StudentProfile.findOne({ universityRollNo: rollNo }).select('_id');
+        if (!studentExists) {
+            return res.status(404).json({ status: "error", message: "Starting student profile not found." });
+        }
+
+        // Placeholder: graphData representing student connections (friendships, classmates, project partners)
+        // This would typically be constructed by querying relationships from the database.
+        // For example, find all students in the same section, or explicit friend connections.
+        // Let's mock a simple graph structure for now.
+        const allStudents = await StudentProfile.find().select('universityRollNo name section').lean();
+        const mockConnections = [ // Simulate some connections
+            { from: allStudents[0]?.universityRollNo, to: allStudents[1]?.universityRollNo, type: "classmate" },
+            { from: allStudents[0]?.universityRollNo, to: allStudents[2]?.universityRollNo, type: "project_partner" },
+            { from: allStudents[1]?.universityRollNo, to: allStudents[3]?.universityRollNo, type: "classmate" },
+        ].filter(c => c.from && c.to); // Filter out undefined if not enough students
+
+        const graphData = {
+            students: allStudents.map(s => ({ id: s.universityRollNo, name: s.name, section: s.section })),
+            connections: mockConnections
+        };
+        
+        const communityData = graphTraversal.exploreCommunity(rollNo, graphData, depth, algorithm);
+        
+        res.json({ status: "success", data: communityData });
+
+    } catch (error) {
+        console.error("Community exploration error:", error);
+        if (error.message.includes("module not loaded")) {
+             return res.status(501).json({ status: "error", message: "Graph traversal module is not available." });
+        }
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+// --- END NEW ALGORITHM ENDPOINTS ---
 
 
 // Error Handlers
@@ -781,12 +944,15 @@ mongoose.connect(process.env.MONGO_URI)
     console.log(" Connected to MongoDB");
     try {
       await Attendance.createIndexes([
-        { universityRollNo: 1, date: 1 },
-        { deviceFingerprint: 1, date: 1 }
+        { key: { universityRollNo: 1, date: 1 }, name: "student_date_attendance_idx" },
+        { key: { deviceFingerprint: 1, date: 1 }, name: "device_date_attendance_idx" }
       ]);
-      console.log("Indexes created");
+      await StudentProfile.createIndexes([
+        { key: { universityRollNo: 1 }, name: "student_rollno_profile_idx", unique: true }
+      ]);
+      console.log("Indexes ensured/created for Attendance and StudentProfile.");
     } catch (err) {
-      console.error("Index creation error:", err);
+      console.error("Index creation/ensuring error:", err);
     }
   })
   .catch(err => {

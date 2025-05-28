@@ -374,7 +374,37 @@
               <i class="fas fa-fingerprint mr-2"></i> Mark Today's Attendance
             </button>
             </div>
-
+            <!-- Campus Navigation -->
+<div id="campus-navigation" class="card p-6">
+  <h3 class="font-bold text-lg mb-4">Campus Navigation</h3>
+  <div class="space-y-3">
+    <div>
+      <label for="navStartLocation" class="block text-sm font-medium text-gray-700">Start Location</label>
+      <select id="navStartLocation" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        <!-- Options will be populated by JS or hardcoded if static -->
+        <option value="HostelA">Hostel A</option>
+        <option value="Library">Library</option>
+        <option value="CSEDept">CSE Department</option>
+        <option value="MainGate">Main Gate</option>
+      </select>
+    </div>
+    <div>
+      <label for="navEndLocation" class="block text-sm font-medium text-gray-700">End Location</label>
+      <select id="navEndLocation" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        <option value="CSEDept">CSE Department</option>
+        <option value="ECEdept">ECE Department</option>
+        <option value="Mess">Mess</option>
+        <option value="AdminBuilding">Admin Building</option>
+      </select>
+    </div>
+    <button id="findPathBtn" class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">
+      Find Shortest Path <span id="pathLoadingSpinner" class="loading-spinner hidden ml-2"></span>
+    </button>
+  </div>
+  <div id="shortestPathResult" class="mt-4 text-sm">
+    <!-- Path will be displayed here -->
+  </div>
+</div>
           <!-- Right Column -->
           <div class="space-y-6">
             <!-- Skills Matrix -->
@@ -602,6 +632,68 @@
   let currentRollNo = null;
   let attendanceChart = null;
   const notificationBadge = document.getElementById('notificationBadge');
+  const findPathBtn = document.getElementById('findPathBtn');
+  const navStartLocation = document.getElementById('navStartLocation');
+  const navEndLocation = document.getElementById('navEndLocation');
+  const shortestPathResult = document.getElementById('shortestPathResult');
+  const pathLoadingSpinner = document.getElementById('pathLoadingSpinner');
+
+  // You might want to populate these dropdowns dynamically if locations can change
+  // For now, assuming they are hardcoded or match the server's mock data
+
+  if (findPathBtn) {
+    findPathBtn.addEventListener('click', async () => {
+      const start = navStartLocation.value;
+      const end = navEndLocation.value;
+      
+      if (!start || !end) {
+        showToast('Please select both start and end locations.', 'error');
+        return;
+      }
+
+      shortestPathResult.innerHTML = '';
+      pathLoadingSpinner.classList.remove('hidden');
+      findPathBtn.disabled = true;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/navigation/shortest-path?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+        const result = await response.json();
+        pathLoadingSpinner.classList.add('hidden');
+        findPathBtn.disabled = false;
+
+        if (!response.ok) {
+          if (response.status === 501) {
+             shortestPathResult.innerHTML = `<p class="text-yellow-600">Navigation feature is currently unavailable.</p>`;
+          } else if (response.status === 404 && result.message.includes("No path found")) {
+             shortestPathResult.innerHTML = `<p class="text-orange-600">${result.message || 'No path found or one of the locations is invalid.'}</p>`;
+          } else {
+            shortestPathResult.innerHTML = `<p class="text-red-500">Error: ${result.message || 'Could not find path.'}</p>`;
+          }
+          return;
+        }
+        
+       if (result.status === "success" && result.data && result.data.path && result.data.path.length > 0) {
+          shortestPathResult.innerHTML = `
+              <p class="font-semibold">Shortest Path:</p>
+              <p class="text-indigo-700">${result.data.path.join(' → ')}</p>
+              <p class="mt-1">Total Distance: <span class="font-medium">${result.data.distance} units</span></p>
+          `;
+      } else if (result.data && (result.data.error || result.data.message)) { // Check for specific messages from Dijkstra
+          shortestPathResult.innerHTML = `<p class="text-orange-600">${result.data.message || result.data.error || 'No path found or error in calculation.'}</p>`;
+      }
+        else {
+          shortestPathResult.innerHTML = `<p class="text-red-500">Error: ${result.message || 'Could not retrieve path information.'}</p>`;
+        }
+
+      } catch (error) {
+        pathLoadingSpinner.classList.add('hidden');
+        findPathBtn.disabled = false;
+        console.error("Error fetching shortest path:", error);
+        shortestPathResult.innerHTML = `<p class="text-red-500">An unexpected error occurred.</p>`;
+        showToast('Failed to get navigation data.', 'error');
+      }
+    });
+  }
 
   async function loadDocuments() {
   try {
@@ -636,7 +728,10 @@
     initModals();
     initNotifications();
     initAttendanceCalendar();
-
+     // ... your existing init calls
+    //initCampusNavigation(); // if you wrap the above in a function
+    //initRecommendations();
+    //initCommunityExplorer();
     // Load student data
     try {
       const response = await fetch(`${API_BASE}/api/students/profile?rollNo=${encodeURIComponent(currentRollNo)}`);
