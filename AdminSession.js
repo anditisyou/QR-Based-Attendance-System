@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-//Admin login session 
+
 const AdminSessionSchema = new mongoose.Schema({
   adminId: {
     type: mongoose.Schema.Types.ObjectId,

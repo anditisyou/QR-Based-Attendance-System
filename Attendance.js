@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
-//Mark attendance Page
-const attendanceSchema = new mongoose.Schema({
+
+const attendancesSchema = new mongoose.Schema({
   name: { type: String, required: true },
   universityRollNo: { type: String, required: true },
   section: { type: String, required: true },
@@ -22,7 +22,7 @@ const attendanceSchema = new mongoose.Schema({
 });
 
 // Create indexes
-attendanceSchema.index({ universityRollNo: 1, date: 1 });
-attendanceSchema.index({ deviceFingerprint: 1, date: 1 });
+attendancesSchema.index({ universityRollNo: 1, date: 1 });
+attendancesSchema.index({ deviceFingerprint: 1, date: 1 });
 
-module.exports = mongoose.model('Attendance', attendanceSchema);
+module.exports = mongoose.model('Attendance', attendancesSchema);

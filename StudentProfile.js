@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-//For dashboard
+
 const studentProfileSchema = new mongoose.Schema({
     universityRollNo: { type: String, required: true, unique: true },
     personalInfo: {
@@ -32,7 +32,7 @@ const studentProfileSchema = new mongoose.Schema({
       tools: [String],
       domains: [String],
       softSkills: [String],
-      proficiency: Map
+      proficiency: Map // e.g., { "Python": "Intermediate" }
     },
     documents: {
       idCardUrl: String,
@@ -41,5 +41,5 @@ const studentProfileSchema = new mongoose.Schema({
       gradeSheets: [String],
       resumeUrl: String
     }
-  },{ collection: 'students' });
+  },{ collection: 'studentprofiles' });
   module.exports = mongoose.model('StudentProfile', studentProfileSchema);

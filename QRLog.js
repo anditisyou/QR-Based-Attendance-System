@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-//QR CODE details
+
 const QRLogSchema = new mongoose.Schema({
   sessionId: {
     type: String,
