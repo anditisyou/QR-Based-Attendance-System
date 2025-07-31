@@ -1,0 +1,21 @@
+{
+  "name": "qr-based-attendance-system",
+  "version": "1.0.0",
+  "description": "📸 QR-Based Attendance System",
+  "main": "AdminSession.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joel912/QR-Based-Attendance-System.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joel912/QR-Based-Attendance-System/issues"
+  },
+  "homepage": "https://github.com/joel912/QR-Based-Attendance-System#readme"
+}
