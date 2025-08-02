@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .chart-container {
+            position: relative;
+            height: 200px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+    <div class="max-w-6xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-800">Admin Attendance Dashboard</h1>
+                <a href="qr-scanner.html" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                    Take Attendance (QR Scanner)
+                </a>
+            </div>
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">Filter Students by Attendance Percentage</h2>
+                <div class="flex gap-2 items-center">
+                    <input type="number" id="minPercentage" placeholder="Min %" min="0" max="100" 
+                        class="w-20 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <span>to</span>
+                    <input type="number" id="maxPercentage" placeholder="Max %" min="0" max="100" 
+                        class="w-20 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <button id="searchPercentageBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        Search
+                    </button>
+                </div>
+                <div id="percentageError" class="text-red-500 mt-2 text-sm"></div>
+            </div>
+
+            <div id="percentageResults" class="hidden mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Students with Attendance Between <span id="percentageRange"></span></h2>
+                    <div>
+                        <span id="totalStudentsCount" class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium mr-2"></span>
+                        <button id="downloadPercentageCsvBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm">
+                            Download CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 border">Roll No</th>
+                                <th class="px-4 py-2 border">Name</th>
+                                <th class="px-4 py-2 border">Section</th>
+                                <th class="px-4 py-2 border">Attendance %</th>
+                                <th class="px-4 py-2 border">Present/Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="percentageResultsTable" class="bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">Search Student Attendance</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="studentRollNo" placeholder="Enter University Roll No" 
+                        class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <button id="searchStudentBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        Search
+                    </button>
+                </div>
+                <div id="studentError" class="text-red-500 mt-2 text-sm"></div>
+            </div>
+
+            <div id="studentDetails" class="hidden mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Student Attendance Records</h2>
+                    <span id="studentPercentage" class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 border">Date</th>
+                                <th class="px-4 py-2 border">Time</th>
+                                <th class="px-4 py-2 border">Status</th>
+                                <th class="px-4 py-2 border">Distance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentAttendanceTable" class="bg-white"></tbody>
+                    </table>
+                </div>
+                <div class="chart-container">
+                    <canvas id="studentChart"></canvas>
+                </div>
+            </div>
+
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">View Attendance by Date</h2>
+                <div class="flex gap-2">
+                    <input type="date" id="attendanceDate" class="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <button id="searchDateBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                        View Attendance
+                    </button>
+                </div>
+            </div>
+
+            <div id="dateSummary" class="hidden mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Attendance Summary for <span id="summaryDate"></span></h2>
+                    <span id="totalPresent" class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border border-gray-300">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 border">Roll No</th>
+                                <th class="px-4 py-2 border">Name</th>
+                                <th class="px-4 py-2 border">Section</th>
+                                <th class="px-4 py-2 border">Time</th>
+                                <th class="px-4 py-2 border">Distance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dateAttendanceTable" class="bg-white"></tbody>
+                    </table>
+                </div>
+                <div class="chart-container">
+                    <canvas id="attendanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API_BASE = 'http://localhost:5000';
+    let chartInstances = [];
+    const token = localStorage.getItem('adminToken');
+    if (!token || token !== 'Hello@123') {
+    window.location.href = 'login.html';
+    }
+    // Utility functions for chart management
+    function trackChartInstance(chart) {
+        chartInstances.push(chart);
+        return chart;
+    }
+    
+    function destroyAllCharts() {
+        chartInstances.forEach(chart => {
+            if (chart && typeof chart.destroy === 'function') {
+                chart.destroy();
+            }
+        });
+        chartInstances = [];
+    }
+    
+    // Debounce function to limit rapid API calls
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+    
+    // Initialize charts with empty data
+    function initializeCharts() {
+        destroyAllCharts();
+        
+        const studentCtx = document.getElementById('studentChart').getContext('2d');
+        const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
+        
+        trackChartInstance(new Chart(studentCtx, {
+            type: 'bar',
+            data: {
+                labels: ['No data available'],
+                datasets: [{
+                    label: 'Monthly Attendance %',
+                    data: [0],
+                    backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                    borderColor: 'rgba(79, 70, 229, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: value => value + '%'
+                        }
+                    }
+                }
+            }
+        }));
+        
+        trackChartInstance(new Chart(attendanceCtx, {
+            type: 'pie',
+            data: {
+                labels: ['No data available'],
+                datasets: [{
+                    label: 'Present Students',
+                    data: [0],
+                    backgroundColor: ['rgba(200, 200, 200, 0.7)'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        }));
+    }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeCharts();
+        document.getElementById('searchPercentageBtn').addEventListener('click', 
+            debounce(searchByPercentageRange, 300));
+        document.getElementById('searchStudentBtn').addEventListener('click', 
+            debounce(searchStudent, 300));
+        document.getElementById('searchDateBtn').addEventListener('click', 
+            debounce(viewDateAttendance, 300));
+        document.getElementById('attendanceDate').valueAsDate = new Date();
+        document.getElementById('downloadPercentageCsvBtn').addEventListener('click', 
+            downloadPercentageResultsAsCsv);
+    });
+
+    async function searchByPercentageRange() {
+        const minPercentageInput = document.getElementById('minPercentage');
+        const maxPercentageInput = document.getElementById('maxPercentage');
+        const minPercentage = parseInt(minPercentageInput.value);
+        const maxPercentage = parseInt(maxPercentageInput.value);
+        const errorElement = document.getElementById('percentageError');
+        
+        // Validate inputs
+        if (minPercentageInput.value === '' || maxPercentageInput.value === '') {
+            errorElement.textContent = 'Please enter both minimum and maximum percentages.';
+            return;
+        }
+        if (isNaN(minPercentage) || isNaN(maxPercentage)) {
+            errorElement.textContent = 'Minimum and maximum percentages must be numbers.';
+            return;
+        }
+        
+        if (minPercentage < 0 || minPercentage > 100 || maxPercentage < 0 || maxPercentage > 100) {
+            errorElement.textContent = 'Percentage must be between 0 and 100.';
+            return;
+        }
+        
+        if (minPercentage > maxPercentage) {
+            errorElement.textContent = 'Minimum percentage cannot be greater than maximum.';
+            return;
+        }
+        
+        errorElement.textContent = '';
+        
+        const searchButton = document.getElementById('searchPercentageBtn');
+        const originalButtonText = searchButton.textContent;
+        searchButton.disabled = true;
+        searchButton.innerHTML = '<span class="spinner">⌛</span> Searching...';
+        document.getElementById('percentageResults').classList.add('hidden');
+
+        try {
+            const response = await axios.get(`${API_BASE}/api/students/by-attendance-range`, {
+                params: { min: minPercentage, max: maxPercentage }
+            });
+            
+            const students = response.data.data;
+            
+            document.getElementById('percentageResults').classList.remove('hidden');
+            document.getElementById('percentageRange').textContent = `${minPercentage}% - ${maxPercentage}%`;
+            document.getElementById('totalStudentsCount').textContent = `${students.length} student${students.length === 1 ? '' : 's'}`;
+            
+            const tableBody = document.getElementById('percentageResultsTable');
+            tableBody.innerHTML = '';
+            
+            if (students.length === 0) {
+                const row = tableBody.insertRow();
+                const cell = row.insertCell();
+                cell.colSpan = 5;
+                cell.textContent = "No students found in this percentage range.";
+                cell.className = "px-4 py-2 border text-center text-gray-500";
+            } else {
+                students.forEach(student => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-4 py-2 border">${student.universityRollNo || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${student.name || student.personalInfo?.fullName || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${student.section || student.academicInfo?.section || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${student.attendancePercentage}%</td>
+                        <td class="px-4 py-2 border">${student.presentDays}/${student.totalClasses}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error fetching students by percentage range:', error);
+            errorElement.textContent = error.response?.data?.error || 'Failed to fetch student data. Please try again.';
+            document.getElementById('percentageResultsTable').innerHTML = '';
+            document.getElementById('totalStudentsCount').textContent = '0 students';
+        } finally {
+            searchButton.disabled = false;
+            searchButton.textContent = originalButtonText;
+        }
+    }
+
+    function downloadPercentageResultsAsCsv() {
+        const tableBody = document.getElementById('percentageResultsTable');
+        if (!tableBody) {
+            console.error("Percentage results table body not found.");
+            alert("No data available to download.");
+            return;
+        }
+        const rows = tableBody.querySelectorAll('tr');
+        let csvContent = "";
+
+        // Headers
+        const headers = ["Roll No", "Name", "Section", "Attendance %", "Present/Total"];
+        csvContent += headers.join(",") + "\r\n";
+
+        if (rows.length === 0) {
+            alert("No student data to download in the current range.");
+            return;
+        }
+
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const rowData = Array.from(cells).map(cell => {
+                let cellText = cell.innerText.replace(/"/g, '""');
+                if (cellText.includes(",")) {
+                    cellText = `"${cellText}"`;
+                }
+                return cellText;
+            });
+            csvContent += rowData.join(",") + "\r\n";
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        
+        const minPercentage = document.getElementById('minPercentage').value || "0";
+        const maxPercentage = document.getElementById('maxPercentage').value || "100";
+        const fileName = `attendance_report_${minPercentage}-${maxPercentage}_percent.csv`;
+        
+        if (navigator.msSaveBlob) {
+            navigator.msSaveBlob(blob, fileName);
+        } else {
+            link.setAttribute("href", URL.createObjectURL(blob));
+            link.setAttribute("download", fileName);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    async function searchStudent() {
+        const rollNo = document.getElementById('studentRollNo').value.trim();
+        const studentError = document.getElementById('studentError');
+        const studentDetailsDiv = document.getElementById('studentDetails');
+        const searchButton = document.getElementById('searchStudentBtn');
+        const originalButtonText = searchButton.textContent;
+
+        if (!rollNo) {
+            studentError.textContent = 'Please enter a roll number';
+            return;
+        }
+        studentError.textContent = '';
+        searchButton.disabled = true;
+        searchButton.innerHTML = '<span class="spinner">⌛</span> Searching...';
+
+        try {
+            const response = await axios.get(`${API_BASE}/api/students/${rollNo}/attendance`);
+            const data = response.data.data;
+            
+            studentDetailsDiv.classList.remove('hidden');
+            document.getElementById('studentPercentage').textContent = 
+                `Attendance: ${data.attendancePercentage}% (${data.presentDays}/${data.totalClasses})`;
+            
+            const tableBody = document.getElementById('studentAttendanceTable');
+            tableBody.innerHTML = '';
+            
+            if (data.attendanceRecords && data.attendanceRecords.length > 0) {
+                data.attendanceRecords.forEach(record => {
+                    let displayTime = record.time || 'N/A';
+                    if (typeof record.time === 'string' && record.time.includes('x')) {
+                        displayTime = record.time.split('x')[0] + ':00';
+                    } else if (typeof record.time === 'number') {
+                        const timeStr = record.time.toString().padStart(4, '0');
+                        displayTime = timeStr.substring(0, 2) + ':' + timeStr.substring(2);
+                    }
+
+                    let displayDistance = 'N/A';
+                    if (record.distanceFromClass != null) {
+                        displayDistance = record.distanceFromClass.toFixed(2) + 'm';
+                    } else if (typeof record.time === 'string' && record.time.includes('x')) {
+                        const parts = record.time.split('x');
+                        if (parts.length > 1 && !isNaN(parseFloat(parts[1]))) {
+                            displayDistance = parseFloat(parts[1]).toFixed(2) + 'm';
+                        }
+                    }
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-4 py-2 border">${record.date || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${displayTime}</td>
+                        <td class="px-4 py-2 border">${record.status || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${displayDistance}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } else {
+                const row = tableBody.insertRow();
+                const cell = row.insertCell();
+                cell.colSpan = 4;
+                cell.textContent = "No attendance records found for this student.";
+                cell.className = "px-4 py-2 border text-center text-gray-500";
+            }
+            
+            await updateStudentChart(data.attendanceRecords, data.totalClasses);
+            
+        } catch (error) {
+            console.error('Error fetching student data:', error);
+            studentError.textContent = 
+                error.response?.data?.error || 'Failed to fetch student data. Check roll number or try again.';
+            studentDetailsDiv.classList.add('hidden');
+        } finally {
+            searchButton.disabled = false;
+            searchButton.textContent = originalButtonText;
+        }
+    }
+
+    async function updateStudentChart(attendanceRecords, overallTotalClasses) {
+        const startTime = performance.now();
+        const ctx = document.getElementById('studentChart').getContext('2d');
+        destroyAllCharts();
+
+        try {
+            // Limit to last 12 months of data
+            const twelveMonthsAgo = new Date();
+            twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+            
+            const filteredRecords = attendanceRecords.filter(record => {
+                const recordDate = new Date(record.date);
+                return recordDate >= twelveMonthsAgo;
+            });
+
+            const monthlyStats = {};
+            
+            // Initialize months in the range
+            let currentDate = new Date(twelveMonthsAgo);
+            currentDate.setDate(1); // Start from first day of month
+            const today = new Date();
+            
+            while (currentDate <= today) {
+                const monthYear = currentDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+                monthlyStats[monthYear] = { present: 0, totalPossible: 0 };
+                currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+            
+            // Get all class dates from API (limited to last 12 months)
+            const allDatesResponse = await axios.get(`${API_BASE}/api/attendance/dates`, {
+                params: {
+                    from: twelveMonthsAgo.toISOString().split('T')[0]
+                }
+            });
+            const allClassDates = allDatesResponse.data.data;
+            
+            // Populate total possible classes per month
+            allClassDates.forEach(dateStr => {
+                const date = new Date(dateStr);
+                const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+                if (monthlyStats[monthYear]) {
+                    monthlyStats[monthYear].totalPossible++;
+                }
+            });
+
+            // Populate student's present days per month
+            if (filteredRecords) {
+                filteredRecords.forEach(record => {
+                    if (record.status === 'present') {
+                        const date = new Date(record.date);
+                        const monthYear = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+                        if (monthlyStats[monthYear]) {
+                            monthlyStats[monthYear].present++;
+                        }
+                    }
+                });
+            }
+            
+            const labels = Object.keys(monthlyStats);
+            const percentages = labels.map(month => {
+                const stats = monthlyStats[month];
+                return stats.totalPossible > 0 ? Math.round((stats.present / stats.totalPossible) * 100) : 0;
+            });
+
+            trackChartInstance(new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Monthly Attendance %',
+                        data: percentages,
+                        backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: value => value + '%'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            display: true
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: context => `${context.dataset.label}: ${context.raw}%`
+                            }
+                        }
+                    }
+                }
+            }));
+
+        } catch (error) {
+            console.error("Error generating student chart:", error);
+            trackChartInstance(new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Error'],
+                    datasets: [{
+                        label: 'Could not load chart data',
+                        data: [],
+                        backgroundColor: 'rgba(255, 99, 132, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            }));
+        } finally {
+            const endTime = performance.now();
+            console.log(`Student chart update took ${(endTime - startTime).toFixed(2)}ms`);
+        }
+    }
+
+    async function viewDateAttendance() {
+        const date = document.getElementById('attendanceDate').value;
+        const dateSummaryDiv = document.getElementById('dateSummary');
+        const searchButton = document.getElementById('searchDateBtn');
+        const originalButtonText = searchButton.textContent;
+
+        if (!date) {
+            alert('Please select a date.');
+            return;
+        }
+        
+        searchButton.disabled = true;
+        searchButton.innerHTML = '<span class="spinner">⌛</span> Fetching...';
+
+        try {
+            const response = await axios.get(`${API_BASE}/api/attendance/by-date`, {
+                params: { date }
+            });
+            const attendanceData = response.data.data;
+            
+            dateSummaryDiv.classList.remove('hidden');
+            
+            const dateObj = new Date(date + 'T00:00:00');
+            document.getElementById('summaryDate').textContent = 
+                dateObj.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            const presentCount = attendanceData.length;
+            document.getElementById('totalPresent').textContent = 
+                `${presentCount} student${presentCount === 1 ? '' : 's'} present`;
+            
+            const tableBody = document.getElementById('dateAttendanceTable');
+            tableBody.innerHTML = '';
+            
+            if (attendanceData.length === 0) {
+                 const row = tableBody.insertRow();
+                 const cell = row.insertCell();
+                 cell.colSpan = 5;
+                 cell.textContent = "No attendance records found for this date.";
+                 cell.className = "px-4 py-2 border text-center text-gray-500";
+            } else {
+                attendanceData.forEach(record => {
+                    let displayTime = record.time || 'N/A';
+                    if (typeof record.time === 'string' && record.time.includes('x')) {
+                        displayTime = record.time.split('x')[0] + ':00';
+                    } else if (typeof record.time === 'number') {
+                         const timeStr = record.time.toString().padStart(4, '0');
+                         displayTime = timeStr.substring(0, 2) + ':' + timeStr.substring(2);
+                    }
+
+                    let displayDistance = 'N/A';
+                    if (record.distanceFromClass != null) {
+                        displayDistance = record.distanceFromClass.toFixed(2) + 'm';
+                    } else if (typeof record.time === 'string' && record.time.includes('x')) {
+                        const parts = record.time.split('x');
+                        if (parts.length > 1 && !isNaN(parseFloat(parts[1]))) {
+                            displayDistance = parseFloat(parts[1]).toFixed(2) + 'm';
+                        }
+                    }
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-4 py-2 border">${record.universityRollNo || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${record.name || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${record.section || 'N/A'}</td>
+                        <td class="px-4 py-2 border">${displayTime}</td>
+                        <td class="px-4 py-2 border">${displayDistance}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            }
+            
+            await updateAttendanceChart(attendanceData);
+            
+        } catch (error) {
+            console.error('Error fetching date attendance:', error);
+            alert('Failed to fetch attendance data for this date. Please try again.');
+            dateSummaryDiv.classList.add('hidden');
+        } finally {
+            searchButton.disabled = false;
+            searchButton.textContent = originalButtonText;
+        }
+    }
+
+    async function updateAttendanceChart(attendanceDataForDate) {
+        const startTime = performance.now();
+        const ctx = document.getElementById('attendanceChart').getContext('2d');
+        destroyAllCharts();
+
+        try {
+            // Count present students per section
+            const sectionCounts = {};
+            const presentRecords = attendanceDataForDate.filter(r => r.status === 'present');
+            
+            presentRecords.forEach(record => {
+                const section = record.section || 'Unknown';
+                sectionCounts[section] = (sectionCounts[section] || 0) + 1;
+            });
+
+            // Sort and limit to top 10 sections
+            const entries = Object.entries(sectionCounts);
+            entries.sort((a, b) => b[1] - a[1]);
+            const topSections = entries.slice(0, 10);
+            
+            const labels = topSections.map(([section]) => section);
+            const data = topSections.map(([, count]) => count);
+
+            // Use a consistent color scheme
+            const backgroundColors = [
+                '#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#ec4899', '#14b8a6', '#f97316', '#64748b', '#84cc16'
+            ].slice(0, labels.length);
+
+            // Determine best chart type based on data
+            const chartType = labels.length <= 5 ? 'pie' : 'bar';
+            
+            trackChartInstance(new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Present Students',
+                        data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: labels.length <= 5 ? 'right' : 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: context => {
+                                    if (chartType === 'pie') {
+                                        return `${context.label}: ${context.raw} student${context.raw === 1 ? '' : 's'}`;
+                                    } else {
+                                        return `${context.dataset.label}: ${context.raw}`;
+                                    }
+                                }
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: labels.length > 0 ? 'Present Students by Section' : 'No attendance data'
+                        }
+                    }
+                }
+            }));
+
+        } catch (error) {
+            console.error('Error updating attendance chart:', error);
+            trackChartInstance(new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Error'],
+                    datasets: [{
+                        label: 'Chart Error',
+                        data: [0],
+                        backgroundColor: 'rgba(255, 99, 132, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            }));
+        } finally {
+            const endTime = performance.now();
+            console.log(`Attendance chart update took ${(endTime - startTime).toFixed(2)}ms`);
+        }
+    }
+    </script>
+</body>
+</html>

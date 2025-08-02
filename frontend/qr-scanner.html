@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin QR Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
+        <h1 class="text-2xl font-bold mb-6">Admin QR Generator</h1>
+        
+        <div class="flex justify-center mb-6">
+            <div id="qr-container" class="relative">
+                <img id="qr-image" src="" alt="QR Code" class="w-64 h-64 border-4 border-blue-500 rounded-lg hidden">
+                <div id="qr-loading" class="absolute inset-0 flex items-center justify-center hidden">
+                    <div class="spinner rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error-message" class="text-red-500 mb-4 min-h-6"></div>
+        
+        <div id="session-info" class="text-sm text-gray-600 mb-4 hidden">
+            Session ID: <span id="session-id" class="font-mono"></span><br>
+            Expires in: <span id="expiry-time"></span> </div>
+        
+        <button id="generate-btn" class="bg-blue-600 text-white py-2 px-6 rounded hover:bg-blue-700 transition-colors">
+            Generate QR Code
+        </button>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000'; // Match your server address
+        let currentSessionId = null;
+        let expiryInterval = null;
+        let autoRefreshTimerId = null; // <<< MODIFIED: Added autoRefreshTimerId
+
+        // MODIFIED: updateExpiryTimer to take milliseconds and calculate min/sec
+        function updateExpiryTimer(expiresInMs) {
+            clearInterval(expiryInterval);
+
+            let remainingTimeMs = expiresInMs;
+
+            const updateDisplay = () => {
+                if (remainingTimeMs <= 0) {
+                    clearInterval(expiryInterval);
+                    document.getElementById('expiry-time').textContent = `0m 0s - Expired`;
+                    document.getElementById('qr-image').classList.add('hidden');
+                    showError('QR code has expired. Please generate a new one.');
+                    currentSessionId = null; 
+                    // No need to clear autoRefreshTimerId here as generateQR handles its own timer
+                    return;
+                }
+
+                const minutes = Math.floor(remainingTimeMs / 60000);
+                const seconds = Math.floor((remainingTimeMs % 60000) / 1000);
+                document.getElementById('expiry-time').textContent = `${minutes}m ${seconds}s`;
+            };
+
+            updateDisplay(); // Initial display
+
+            expiryInterval = setInterval(() => {
+                remainingTimeMs -= 1000;
+                updateDisplay();
+            }, 1000);
+        }
+
+        function showError(message) {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = message;
+            // errorElement.classList.remove('hidden'); // Assuming showError implies visibility
+        }
+
+        function clearError() {
+            const errorElement = document.getElementById('error-message');
+            errorElement.textContent = '';
+            // errorElement.classList.add('hidden'); // Assuming clearError implies invisibility
+        }
+
+        async function generateQR() {
+            const generateBtn = document.getElementById('generate-btn');
+            
+            // MODIFIED: Clear previous auto-refresh timer
+            if (autoRefreshTimerId) {
+                clearTimeout(autoRefreshTimerId);
+                autoRefreshTimerId = null;
+            }
+
+            generateBtn.disabled = true;
+            generateBtn.textContent = "Generating...";
+            clearError();
+            document.getElementById('qr-image').classList.add('hidden');
+            document.getElementById('qr-loading').classList.remove('hidden');
+            document.getElementById('session-info').classList.add('hidden');
+
+            try {
+                const response = await axios.get(`${API_BASE}/api/generate-qr`);
+                const data = response.data;
+                
+                if (data.status === "success" && data.qrImage && data.sessionId && typeof data.expiresIn === 'number') {
+                    const qrImage = document.getElementById('qr-image');
+                    qrImage.onload = () => {
+                        qrImage.classList.remove('hidden');
+                        document.getElementById('qr-loading').classList.add('hidden');
+                    };
+                    qrImage.onerror = () => {
+                        showError('Failed to load QR code image');
+                        document.getElementById('qr-loading').classList.add('hidden');
+                    };
+                    qrImage.src = `${API_BASE}${data.qrImage}?t=${Date.now()}`; // Cache buster
+                    
+                    document.getElementById('session-id').textContent = data.sessionId;
+                    document.getElementById('session-info').classList.remove('hidden');
+                    
+                    currentSessionId = data.sessionId;
+                    updateExpiryTimer(data.expiresIn); // <<< MODIFIED: Pass full expiresIn (ms)
+                    
+                    // MODIFIED: Auto-refresh 10 seconds before expiry
+                    if (data.expiresIn > 10000) { // Ensure expiresIn is greater than 10s
+                        autoRefreshTimerId = setTimeout(() => {
+                            console.log("Auto-refreshing QR code due to impending expiry.");
+                            generateQR(); // This will call generateQR again
+                        }, data.expiresIn - 10000); // 10 seconds before expiry
+                    } else if (data.expiresIn > 0) { // If validity is too short (but >0), let it expire
+                         autoRefreshTimerId = setTimeout(() => {
+                            console.log("QR code expired (short validity). Will not auto-refresh this instance.");
+                            // The timer will handle display update to expired.
+                            // currentSessionId will be null, user can click button.
+                        }, data.expiresIn);
+                    }
+
+                } else {
+                    throw new Error(data.message || 'Invalid response from server');
+                }
+                
+            } catch (error) {
+                console.error("QR generation failed:", error);
+                showError(error.response?.data?.message || error.message || 'Failed to generate QR code');
+                document.getElementById('qr-loading').classList.add('hidden');
+                currentSessionId = null; // Ensure session is cleared on error
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = "Generate QR Code";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById('generate-btn').addEventListener('click', generateQR);
+            generateQR(); // Generate initial QR code on page load
+            
+            // MODIFIED: Removed the generic setInterval for auto-refresh
+            // The new logic within generateQR is more precise.
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!-- dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f9fafb;
+    }
+    .section {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 1rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+  </style>
+</head>
+<body class="p-6">
+  <h1 class="text-3xl font-bold text-center mb-6">📘 Student Dashboard</h1>
+
+  <div id="dashboardContent" class="space-y-6">
+    <!-- Section Templates -->
+    <div class="section" id="personalInfo">
+      <h2 class="text-xl font-semibold mb-2">🔹 1. Personal Information</h2>
+      <div id="personalContent"></div>
+    </div>
+
+    <div class="section" id="academicInfo">
+      <h2 class="text-xl font-semibold mb-2">🔹 2. Academic Information</h2>
+      <div id="academicContent"></div>
+    </div>
+
+    <div class="section" id="attendanceOverview">
+      <h2 class="text-xl font-semibold mb-2">🔹 3. Attendance Overview</h2>
+      <canvas id="attendanceChart" class="w-full max-w-xl"></canvas>
+    </div>
+
+    <div class="section" id="skillMatrix">
+      <h2 class="text-xl font-semibold mb-2">🔹 10. Skill Matrix</h2>
+      <div id="skillsContent"></div>
+    </div>
+
+    <div class="section" id="documents">
+      <h2 class="text-xl font-semibold mb-2">🔹 12. Documents & ID</h2>
+      <div id="documentsContent"></div>
+    </div>
+  </div>  
+    <script>
+  document.addEventListener("DOMContentLoaded", async () => {
+  const rollNo = new URLSearchParams(window.location.search).get('rollNo');
+
+  if (!rollNo) {
+    showError("Missing roll number in URL");
+    return;
+  }
+
+  try {
+    const API_BASE = 'http://localhost:5000'; // Your backend URL
+    const response = await fetch(`${API_BASE}/api/students/profile?rollNo=${encodeURIComponent(rollNo)}`);
+    
+    // Check if response is OK first
+    if (!response.ok) {
+      const errorText = await response.text(); // Read as text first
+      try {
+        // Try to parse as JSON (some errors return JSON)
+        const errorJson = JSON.parse(errorText);
+        throw new Error(errorJson.error || errorJson.message || "Request failed");
+      } catch {
+        // If not JSON, use raw text
+        throw new Error(errorText || "Request failed");
+      }
+    }
+
+    // If response is OK, parse as JSON
+    const { data } = await response.json();
+    renderProfile(data);
+  } catch (error) {
+    showError(`Failed to load data: ${error.message}`);
+    console.error("Fetch error:", error);
+  }
+});
+
+function renderProfile(profile) {
+  const personal = profile.personalInfo || {};
+  const academic = profile.academicInfo || {};
+  const skills = profile.skills || {};
+  const documents = profile.documents || {};
+
+  // Personal Info
+  document.getElementById("personalContent").innerHTML = `
+    <p><strong>Name:</strong> ${personal.fullName || "N/A"}</p>
+    <p><strong>Email:</strong> ${personal.email || "N/A"}</p>
+    <p><strong>Contact:</strong> ${personal.contactNumber || "N/A"}</p>
+    <p><strong>LinkedIn:</strong> ${personal.linkedin ? `<a href="${personal.linkedin}" target="_blank">Profile</a>` : "N/A"}</p>
+  `;
+
+  // Academic Info
+  document.getElementById("academicContent").innerHTML = `
+    <p><strong>University:</strong> ${academic.universityName || "N/A"}</p>
+    <p><strong>Department:</strong> ${academic.department || "N/A"}</p>
+    <p><strong>CGPA:</strong> ${academic.cgpa || "N/A"}</p>
+    <p><strong>Advisor:</strong> ${academic.advisor || "N/A"}</p>
+  `;
+
+  // Skills
+  document.getElementById("skillsContent").innerHTML = `
+    <p><strong>Programming:</strong> ${(skills.programming || []).join(", ") || "N/A"}</p>
+    <p><strong>Domains:</strong> ${(skills.domains || []).join(", ") || "N/A"}</p>
+  `;
+
+  // Documents
+  document.getElementById("documentsContent").innerHTML = `
+    ${documents.resumeUrl ? `<p><a href="${documents.resumeUrl}" target="_blank">Download Resume</a></p>` : ''}
+    ${documents.idCardUrl ? `<p><a href="${documents.idCardUrl}" target="_blank">ID Card</a></p>` : ''}
+  `;
+}
+
+function renderAttendance(records) {
+  const tableBody = document.getElementById("attendanceTable");
+  tableBody.innerHTML = records.map(record => `
+    <tr>
+      <td class="px-4 py-2 border">${record.date || "N/A"}</td>
+      <td class="px-4 py-2 border">${record.time || "N/A"}</td>
+      <td class="px-4 py-2 border">${record.status || "N/A"}</td>
+    </tr>
+  `).join("");
+}
+
+function showError(message) {
+  document.getElementById("personalContent").innerHTML = `
+    <div class="text-red-500 p-4 bg-red-50 rounded-lg">
+      ${message}
+    </div>
+  `;
+}
+    </script>
+</body>
+</html>
